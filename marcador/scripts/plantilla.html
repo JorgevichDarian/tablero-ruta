@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tablero de ruta · Logística Total</title>
+<style>
+:root{--bg:#f4f5f7;--card:#fff;--ink:#1d2330;--mut:#5b6475;--line:#e6e8ec;--acc:#1d2330}
+@media (prefers-color-scheme:dark){:root{--bg:#14171d;--card:#1d2129;--ink:#e8eaee;--mut:#9aa1ad;--line:#2c313b;--acc:#e8eaee}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:860px;margin:0 auto;padding:32px 20px 60px}
+h1{font-size:26px;margin:0 0 6px}h2{font-size:17px;margin:0 0 10px}.lead{color:var(--mut);margin:0 0 24px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px 22px;margin-bottom:16px}
+ol{margin:0;padding-left:22px}li{margin:8px 0}
+.bm{display:inline-block;background:#1d2330;color:#fff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:8px;cursor:grab;border:2px dashed #7d8696}
+@media (prefers-color-scheme:dark){.bm{background:#e8eaee;color:#1d2330}}
+button{font:inherit;font-weight:600;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:8px;padding:8px 14px;cursor:pointer}
+kbd{font:12px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 5px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin:12px 0}
+.ok{color:#2e9e5b;font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:14px}td{padding:8px 6px;border-bottom:1px solid var(--line);vertical-align:top}
+.dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.r{background:#d93a3a}.a{background:#e9a417}.v{background:#2e9e5b}.z{background:#3b7dd8}.g{background:#9aa1ad}
+.mut{color:var(--mut);font-size:13.5px}
+textarea{width:100%;height:70px;font:11px ui-monospace,Menlo,monospace;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--mut);padding:8px;resize:vertical}
+</style></head><body><main>
+<h1>Tablero de ruta</h1>
+<p class="lead">Para modulación y supervisión de ruta. Muestra el estado de cada camión en vivo, sobre Nextbyn, y se actualiza solo cada 5 minutos.</p>
+
+<div class="card"><h2>1 · Instalarlo (una sola vez por PC)</h2>
+<ol>
+<li>En Chrome, mostrá la barra de marcadores con <kbd>Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>B</kbd>.</li>
+<li>Arrastrá este botón hasta la barra de marcadores:
+<div class="row"><a class="bm" id="bm" href="#">🚚 Tablero de ruta</a></div></li>
+<li class="mut">Si no se deja arrastrar: tocá <b>Copiar código</b>, hacé clic derecho en la barra de marcadores → <b>Agregar página…</b>, poné como nombre <b>Tablero de ruta</b> y pegá el código en <b>URL</b>.
+<div class="row"><button id="cp">Copiar código</button><span id="cpok" class="ok" hidden>Copiado ✓</span></div>
+<textarea id="code" readonly aria-label="Código del marcador"></textarea></li>
+</ol></div>
+
+<div class="card"><h2>2 · Usarlo</h2>
+<ol>
+<li>Entrá a Nextbyn con tu usuario y abrí el <b>Mapa de entregas</b>.</li>
+<li>Tocá <b>🚚 Tablero de ruta</b> en la barra de marcadores. El tablero se abre arriba del mapa.</li>
+<li>Dejá esa pestaña abierta: cada 5 minutos vuelve a leer Nextbyn solo. Con <b>Actualizar ahora</b> lo forzás.</li>
+<li>Tocá cualquier camión para desplegar sus clientes. Tocá un cliente para ver el detalle de productos.</li>
+<li><b>Minimizar</b> lo deja como una burbuja abajo a la derecha con el conteo por color, y podés seguir usando el mapa. Tocando la burbuja (o el marcador) vuelve.</li>
+<li><b>Horarios de referencia:</b> apertura de ruta esperada de lunes a viernes de 07:30 a 08:00 y los sábados de 08:00 a 08:30; fin de jornada a las 15:00 de lunes a viernes y a las 13:00 los sábados. Si un camión abre la ruta después de la ventana, debajo del estado aparece un aviso en amarillo (alerta secundaria: no cuenta como alerta ni cambia el semáforo).</li>
+<li>Arriba podés cambiar la <b>hora objetivo de fin</b> del día (15:00 de lunes a viernes, 13:00 los sábados) y los minutos <b>sin avance</b> que disparan alerta (45 por defecto). Cada PC recuerda su configuración.</li>
+</ol></div>
+
+<div class="card"><h2>3 · Conectar Chess (clientes, importes y cajones)</h2>
+<p class="mut" style="margin-top:0">Hace falta tener usuario en Chess web. Se hace una vez cada vez que abrís el tablero.</p>
+<ol>
+<li>En el tablero, tocá <b>Conectar Chess</b>. Se abre Chess en una pestaña nueva: si te lo pide, entrá con tu usuario.</li>
+<li>En esa pestaña de Chess, tocá el mismo marcador <b>🚚 Tablero de ruta</b>. Aparece arriba el cartel "Puente Chess → Tablero activo".</li>
+<li><b>Si recargás la pestaña de Chess (F5) o se vence la sesión, el puente se apaga:</b> volvé a tocar el marcador en esa pestaña. Si recargás Nextbyn, abrí el tablero y tocá <b>Conectar Chess</b>: reusa la pestaña de Chess que ya está abierta y le pide los datos al instante.</li>
+<li>Volvé a la pestaña de Nextbyn sin cerrar la de Chess. Cada 5 minutos le manda los datos al tablero. El botón del tablero pasa a decir <b>✓ Chess</b> con la hora.</li>
+</ol>
+<p class="mut">Al desplegar un camión se ve el chofer, las planillas, el importe total, los bultos y los cajones. Para cada cliente se ve el domicilio, la localidad, el comprobante, el importe, los bultos y los <b>cajones retornables</b> (artículos RET, sin contar barriles). El estado de cada cliente (entregado, rechazado o pendiente) sale de la pestaña <b>Clientes</b> de Nextbyn, columna Estado entrega. Los demás datos salen del Reporte de Repartos detallado de Chess: planillas de ayer y hoy, con entrega hoy. Los clientes con rechazo cargado en Chess aparecen primero, con el motivo.</p></div>
+
+<div class="card"><h2>4 · Cómo leer el semáforo</h2>
+<table>
+<tr><td><span class="dot r"></span><b>Rojo</b></td><td>Con el ritmo actual termina más de 1 h después de la hora objetivo, lleva más de 45 min de jornada sin visitas, o cerró la jornada con clientes pendientes.</td></tr>
+<tr><td><span class="dot a"></span><b>Amarillo</b></td><td>Termina hasta 1 h después del objetivo, o la jornada tiene un inicio anómalo (por ejemplo, abierta desde la madrugada).</td></tr>
+<tr><td><span class="dot z"></span><b>Azul</b></td><td>Salió hace menos de 45 min: todavía no hay ritmo para medir.</td></tr>
+<tr><td><span class="dot v"></span><b>Verde</b></td><td>Termina antes de la hora objetivo, o ya no tiene pendientes y le falta cerrar la jornada.</td></tr>
+<tr><td><span class="dot g"></span><b>Gris</b></td><td>Jornada cerrada sin pendientes.</td></tr>
+</table>
+<p class="mut"><b>Ritmo</b> = clientes visitados por hora desde el inicio de jornada (incluye la salida del CD, así que en la primera hora sale bajo). <b>Fin estimado</b> = ahora + pendientes ÷ ritmo. También avisa los rechazos y los camiones que no registran visitas nuevas hace rato.</p></div>
+
+<div class="card"><h2>Para tener en cuenta</h2>
+<ul class="mut">
+<li>Lee los datos con las sesiones de Nextbyn y Chess de quien lo usa: si la sesión vence, el tablero lo avisa y hay que volver a entrar.</li>
+<li>La PC no tiene que suspenderse ni cerrar Chrome para que siga actualizando.</li>
+<li>Los datos no salen de Nextbyn ni se guardan en ningún otro lado.</li>
+</ul></div>
+</main>
+<script>
+var BM = "__BOOKMARKLET__";
+document.getElementById('bm').setAttribute('href', BM);
+document.getElementById('bm').addEventListener('click', function(e){ e.preventDefault(); });
+document.getElementById('code').value = BM;
+document.getElementById('cp').addEventListener('click', function(){
+  var ok=document.getElementById('cpok');
+  function done(){ ok.hidden=false; setTimeout(function(){ok.hidden=true},2500); }
+  try { navigator.clipboard.writeText(BM).then(done, sel); } catch(e){ sel(); }
+  function sel(){ var t=document.getElementById('code'); t.focus(); t.select(); try{document.execCommand('copy');done();}catch(e){} }
+});
+</script></body></html>

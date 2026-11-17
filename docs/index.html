@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Tablero de ruta · Logística Total</title>
+<link rel="icon" href="icono.png">
+<link rel="stylesheet" href="reporte.css">
+</head>
+<body>
+<header>
+  <div class="tit">
+    <h1>Tablero de ruta · Logística Total <span class="ver">reporte v1</span></h1>
+    <div class="sub" id="sub">Tocá «Actualizar todo» para traer los datos.</div>
+  </div>
+  <div class="sp"></div>
+  <div class="fuentes">
+    <button id="b-todo" class="prim">Actualizar todo</button>
+    <button id="b-nb">Nextbyn <span id="t-nb" class="hora">—</span></button>
+    <button id="b-ch">Chess <span id="t-ch" class="hora">—</span></button>
+    <label class="chk"><input type="checkbox" id="auto" checked> Auto cada 5 min</label>
+  </div>
+  <div class="cfg">
+    <label id="l-obj">Fin objetivo<input id="obj" inputmode="numeric" maxlength="5"></label>
+    <label>Alerta sin avance (min)<input id="sin" inputmode="numeric" maxlength="3"></label>
+    <a class="guia" href="https://darianjorgevich.github.io/tablero-ruta/guia.html" target="_blank" rel="noopener">Guía</a>
+  </div>
+</header>
+<main id="main">
+  <div id="aviso"></div>
+  <div class="msg" id="vacio">Todavía no hay datos. Tocá <b>Actualizar todo</b>: la extensión lee Nextbyn y Chess con tu sesión (si no tenés esas páginas abiertas, las abre un momento en segundo plano).</div>
+  <div id="contenido"></div>
+</main>
+<script src="reporte.js"></script>
+</body>
+</html>
