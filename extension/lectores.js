@@ -136,12 +136,27 @@ async function leerNextbyn(opciones) {
     return out;
   }
 
+  // Toca la pestaña "Clientes" del panel del mapa. Nunca un enlace del menú que lleve a
+  // otra página (en Nextbyn el menú tiene un "Clientes" que abre Contactos de Clientes).
   function abrirPestanaClientes(doc) {
     try {
-      const c = Array.from(doc.querySelectorAll('a,li,span,button,div')).filter(
-        (e) => (e.textContent || '').trim() === 'Clientes' && !e.querySelector('a,li,span,button,div')
+      const navegaAfuera = (e) => {
+        const a = e.closest('a[href]');
+        if (!a) return false;
+        const h = (a.getAttribute('href') || '').trim();
+        return !(h === '' || h.charAt(0) === '#' || /^javascript:/i.test(h));
+      };
+      const candidatos = Array.from(doc.querySelectorAll('a,li,span,button,div')).filter(
+        (e) => (e.textContent || '').trim() === 'Clientes' && !e.querySelector('a,li,span,button,div') && !navegaAfuera(e)
       );
-      if (c.length) c[0].click();
+      // Solo la que está junto a "Transportistas" (la barra de pestañas del panel del mapa).
+      const pestana = candidatos.find((e) => {
+        for (let p = e.parentElement, i = 0; p && i < 4; p = p.parentElement, i++) {
+          if (/Transportistas/.test(p.textContent || '')) return true;
+        }
+        return false;
+      });
+      if (pestana) pestana.click();
     } catch (e) { /* nada */ }
   }
 
@@ -161,8 +176,9 @@ async function leerNextbyn(opciones) {
   }
   if (!cams.length) return { error: 'Nextbyn no mostró camiones en 90 s. ¿Carga el Mapa de entregas?' };
 
-  abrirPestanaClientes(document);
+  // Primero intenta leer sin tocar nada; solo si no hay datos abre la pestaña del panel.
   let cli = clientes(document);
+  if (!cli.n) abrirPestanaClientes(document);
   const t1 = Date.now();
   while (!cli.n && Date.now() - t1 < 10000) {
     await esperar(1000);
