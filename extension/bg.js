@@ -76,11 +76,26 @@ async function leer(clave) {
   }
 }
 
+// Hoja "PL4.2 Carga ruteo" del Plan de agrupación de clientes (prioridad de cada cliente en el ruteo).
+// Se lee como CSV con la sesión de Google del usuario, así funciona aunque la hoja no sea pública.
+const HOJA_PRIORIDADES = 'https://docs.google.com/spreadsheets/d/1Qw1O7IAliJQEj-3-ItGP_kYfWcFosSrr90vQHrKuRsg/gviz/tq?tqx=out:csv&headers=0&sheet=' + encodeURIComponent('PL4.2 Carga ruteo');
+async function leerPrioridades() {
+  try {
+    const r = await fetch(HOJA_PRIORIDADES, { credentials: 'include', cache: 'no-store' });
+    const texto = await r.text();
+    if (!r.ok || /^\s*<(!doctype|html)/i.test(texto)) throw new Error('Google no dejó leer la hoja (' + r.status + '). Revisá que la hoja esté compartida con tu usuario.');
+    return { ok: true, data: { csv: texto, at: Date.now() } };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
 // Un solo pedido en curso por fuente.
 const enCurso = {};
 function atender(msg) {
   if (msg && msg.tipo === 'ping') return Promise.resolve({ ok: true, version: VERSION });
   const clave = msg && msg.tipo;
+  if (clave === 'prioridades') return leerPrioridades();
   if (!FUENTES[clave]) return Promise.resolve({ ok: false, error: 'Pedido desconocido.' });
   if (!enCurso[clave]) {
     enCurso[clave] = leer(clave)

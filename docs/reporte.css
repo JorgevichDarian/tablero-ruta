@@ -187,3 +187,30 @@ tr.prod table td{padding:2px 14px 2px 0;border:0}
 }
 @media (max-width:600px){table.cli .h-dom{display:none}}
 @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+/* ---------- prioridad de pedidos pendientes ---------- */
+button.prio{display:inline-flex;align-items:center;gap:6px;margin:6px 0 0 17px;padding:3px 8px 3px 9px;border:1px solid var(--linea);border-radius:5px;background:#fff;color:var(--tinta2);font-size:12.5px;font-weight:600;cursor:pointer;line-height:1.2;text-align:left}
+button.prio:hover,button.prio:focus-visible{border-color:var(--tinta2);color:var(--tinta)}
+button.prio span{font:700 13px/1 var(--cond);background:var(--tinta);color:#fff;border-radius:3px;padding:2px 5px}
+.pp{position:absolute;z-index:50;width:min(460px,calc(100vw - 16px));max-height:min(440px,70vh);overflow:auto;overflow-x:hidden;background:#fff;border:1px solid var(--linea);border-radius:8px;box-shadow:0 12px 32px rgba(19,32,48,.22);font-size:14px}
+.pp-cab{position:sticky;top:0;background:var(--noche);color:#fff;padding:10px 14px}
+.pp-cab b{display:block;font:700 18px/1.15 var(--cond)}
+.pp-cab span{display:block;font-size:12.5px;color:#AFC0D3;margin-top:2px}
+.pp-msg{margin:10px 14px 0;color:var(--tinta2);font-size:13px}
+.pp-lista{list-style:none;margin:0;padding:4px 0;counter-reset:orden}
+.pp-lista li{counter-increment:orden;display:grid;grid-template-columns:30px minmax(0,1fr) auto;grid-template-areas:"n cli imp" "n plan plan";column-gap:10px;row-gap:3px;padding:8px 14px;border-top:1px solid var(--linea2)}
+.pp-lista li:first-child{border-top:0}
+.pp-lista li::before{content:counter(orden);grid-area:n;align-self:start;font:700 20px/1 var(--cond);color:var(--tinta);text-align:right;padding-top:1px}
+.pp-cli{grid-area:cli;min-width:0}
+.pp-cli b{display:block;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pp-cli small,.pp-plan small{display:block;color:var(--tenue);font-size:12px}
+.pp-plan{grid-area:plan;display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+.pp-plan small{display:inline}
+.pp-imp{grid-area:imp;font-weight:600;white-space:nowrap}
+.pp-tag{font-size:12px;font-weight:700;padding:1px 7px;border-radius:3px;border:1px solid currentColor;white-space:nowrap}
+.p1 .pp-tag{background:var(--tinta);border-color:var(--tinta);color:#fff}
+.p2 .pp-tag{color:var(--tinta)}
+.p3 .pp-tag,.p4 .pp-tag{color:var(--tinta2);border-color:var(--linea)}
+.pp-tag.sin{color:var(--tenue);border-style:dashed;border-color:var(--linea);background:none}
+.pp-pie{margin:0;padding:8px 14px 10px;border-top:1px solid var(--linea2);color:var(--tenue);font-size:12px}
+@media (max-width:900px){button.prio{margin-left:0}}

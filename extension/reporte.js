@@ -37,7 +37,9 @@
   var hoy = new Date().toDateString();
   var nb = guardado.nb && new Date(guardado.nb.at).toDateString() === hoy ? guardado.nb : null; // { cams, cli, at }
   var ch = guardado.ch && new Date(guardado.ch.at).toDateString() === hoy ? guardado.ch : null; // { data, at }
-  var errNb = '', errCh = '', sinExtension = false;
+  var errNb = '', errCh = '', errPr = '', sinExtension = false;
+  var CLAVE_PRIO = 'ltReportePrio';
+  var pr = leerLS(CLAVE_PRIO, null); // { mapa, at }
   var abiertos = {}, clientesAbiertos = {};
   var ocupado = { nextbyn: false, chess: false };
   var proxima = 0, timer = null;
@@ -76,7 +78,23 @@
 
   function actualizarTodo() {
     programar();
+    // La hoja de prioridades cambia poco: se vuelve a leer si tiene más de 1 hora.
+    if (!pr || Date.now() - pr.at > 36e5) actualizarPrioridades();
     return Promise.all([actualizar('nextbyn'), actualizar('chess')]);
+  }
+
+  var leyendoPr = false;
+  function actualizarPrioridades() {
+    if (leyendoPr) return;
+    leyendoPr = true;
+    pedir('prioridades').then(function (data) {
+      pr = { mapa: armarPrioridades(data.csv), at: data.at };
+      errPr = '';
+      guardarLS(CLAVE_PRIO, pr);
+    }).catch(function (e) {
+      var m = String(e.message || e);
+      errPr = m === 'NOEXT' ? 'falta la extensión' : m;
+    }).then(function () { leyendoPr = false; refrescarPopover(); });
   }
 
   function programar() {
@@ -201,6 +219,113 @@
   }
   function orden(c) { return { rechazado: 0, parcial: 0, '': 1, entregado: 2 }[c.est || '']; }
 
+  // Cruza cada cliente de Chess con su estado en Nextbyn (por código, o por nombre).
+  function cruzar(dc, nbCli) {
+    var porNombre = {};
+    Object.keys(nbCli).forEach(function (k) { porNombre[nz(nbCli[k].nombre)] = nbCli[k]; });
+    return dc.clientes.map(function (c0) {
+      var c = Object.assign({}, c0);
+      c.codigo = (/^\s*(\d+)/.exec(c.cliente) || [])[1] || '';
+      var x = (c.codigo && nbCli[c.codigo]) || porNombre[nz(String(c.cliente).replace(/^\s*\d+\s*-\s*/, ''))];
+      c.leidoNextbyn = !!x;
+      c.nbEstado = x ? x.estado : '';
+      c.est = c.rechazado ? 'rechazado' : c.parcial ? 'parcial' : c.entregado ? 'entregado' : '';
+      var s = x && estadoNextbyn(x.estado);
+      if (s === 'rechazado' || s === 'parcial') c.est = s;
+      else if (s === 'entregado' && !c.est) c.est = 'entregado';
+      return c;
+    });
+  }
+
+  // ---------- prioridad de pedidos pendientes (hoja PL4.2 Carga ruteo) ----------
+  var NOMBRE_PRIO = { 1: 'Ganador', 2: 'Básico', 3: 'En crecimiento', 4: 'Ventas bajas' };
+  function leerCSV(texto) {
+    var filas = [], fila = [], campo = '', comillas = false;
+    for (var i = 0; i < texto.length; i++) {
+      var c = texto[i];
+      if (comillas) {
+        if (c === '"') { if (texto[i + 1] === '"') { campo += '"'; i++; } else comillas = false; }
+        else campo += c;
+      } else if (c === '"') comillas = true;
+      else if (c === ',') { fila.push(campo); campo = ''; }
+      else if (c === '\n' || c === '\r') {
+        if (c === '\r' && texto[i + 1] === '\n') i++;
+        fila.push(campo); filas.push(fila); fila = []; campo = '';
+      } else campo += c;
+    }
+    if (campo || fila.length) { fila.push(campo); filas.push(fila); }
+    return filas;
+  }
+  // Devuelve { codigo: { p, cluster, ventana, espera } } o lanza un error si no encuentra las columnas.
+  function armarPrioridades(csv) {
+    var filas = leerCSV(csv), h = -1;
+    for (var i = 0; i < Math.min(filas.length, 30); i++) {
+      var t = filas[i].join('|').toLowerCase();
+      if (/cod\.?\s*cliente/.test(t) && /cl[uú]ster/.test(t)) { h = i; break; }
+    }
+    if (h < 0) throw new Error('La pestaña PL4.2 Carga ruteo no tiene la columna «Cod. Cliente».');
+    var cab = filas[h].map(function (x) { return x.toLowerCase(); });
+    function col(re) { for (var k = 0; k < cab.length; k++) if (re.test(cab[k])) return k; return -1; }
+    var cCod = col(/cod\.?\s*cliente/), cPrio = col(/prioridad.*ruteo/), cClu = col(/cl[uú]ster vigente/), cVen = col(/ventana/), cEsp = col(/espera/);
+    if (cClu < 0) cClu = col(/cl[uú]ster/);
+    var porCluster = { ganador: 1, 'básico': 2, basico: 2, 'en crecimiento': 3, 'ventas bajas': 4 };
+    var mapa = {}, n = 0;
+    for (var j = h + 1; j < filas.length; j++) {
+      var f = filas[j], cod = String(f[cCod] || '').trim();
+      if (!/^\d+$/.test(cod)) continue;
+      var clu = String(f[cClu] || '').trim();
+      var p = cPrio >= 0 ? parseInt(f[cPrio], 10) : NaN;
+      if (!(p >= 1 && p <= 9)) p = porCluster[clu.toLowerCase()] || 0;
+      mapa[cod] = { p: p, cluster: clu, ventana: cVen >= 0 ? String(f[cVen] || '').trim() : '', espera: cEsp >= 0 ? String(f[cEsp] || '').trim() : '' };
+      n++;
+    }
+    if (!n) throw new Error('La pestaña PL4.2 Carga ruteo no tiene clientes.');
+    return mapa;
+  }
+
+  // Pendientes de un camión, ordenados: prioridad del ruteo (1 primero), después mayor importe.
+  function pendientesDe(pat) {
+    var nbCli = (nb && nb.cli && nb.cli.p && nb.cli.p[pat]) || {};
+    var dc = ch && ch.data && ch.data[pat];
+    var lista;
+    if (dc) lista = cruzar(dc, nbCli);
+    else lista = Object.keys(nbCli).map(function (id) {
+      var x = nbCli[id];
+      return { codigo: id.indexOf('N:') ? id : '', cliente: (id.indexOf('N:') ? id + ' - ' : '') + x.nombre, domicilio: x.domicilio, est: estadoNextbyn(x.estado), leidoNextbyn: true };
+    });
+    var mapa = (pr && pr.mapa) || {};
+    var pend = lista.filter(function (c) { return !c.est; }).map(function (c) {
+      var x = mapa[c.codigo] || null;
+      return Object.assign({}, c, { prio: x && x.p ? x.p : 9, plan: x });
+    });
+    pend.sort(function (a, b) { return a.prio - b.prio || (b.importe || 0) - (a.importe || 0) || String(a.cliente).localeCompare(b.cliente); });
+    return { lista: pend, fuente: dc ? 'chess' : lista.length ? 'nextbyn' : '', confirmados: !!(nb && nb.cli && nb.cli.n) };
+  }
+
+  // Cantidad para el botón: la lista real de pendientes si ya hay detalle de clientes; si no, el contador de Nextbyn.
+  function cantidadPendientes(e) {
+    var r = pendientesDe(String(e.patente).toUpperCase());
+    return r.fuente ? r.lista.length : e.pendientes;
+  }
+
+  function vistaPrioridad(pat) {
+    var r = pendientesDe(pat);
+    var h = '<div class="pp-cab"><b>Pedidos pendientes de ' + esc(pat) + '</b><span>Orden de visita sugerido por prioridad del ruteo; dentro de cada prioridad, primero el de mayor importe.</span></div>';
+    if (!pr) h += '<p class="pp-msg">' + (errPr ? 'No se pudo leer la hoja de prioridades: ' + esc(errPr) : 'Leyendo la hoja de prioridades…') + '</p>';
+    if (!r.fuente) return h + '<p class="pp-msg">Todavía no hay detalle de clientes de este camión. Tocá <b>Actualizar todo</b>.</p>';
+    if (!r.lista.length) return h + '<p class="pp-msg">No quedan pedidos pendientes.</p>';
+    if (r.fuente === 'chess' && !r.confirmados) h += '<p class="pp-msg">Sin estados de Nextbyn: puede incluir clientes ya entregados.</p>';
+    h += '<ol class="pp-lista">' + r.lista.map(function (c) {
+      var plan = c.plan;
+      var nombre = String(c.cliente).replace(/^\s*\d+\s*-\s*/, '');
+      return '<li class="p' + c.prio + '"><span class="pp-cli"><b>' + esc(nombre) + '</b><small>' + esc(c.codigo || '') + (c.domicilio ? ', ' + esc(c.domicilio) : '') + '</small></span>' +
+        '<span class="pp-plan">' + (plan ? '<span class="pp-tag">P' + plan.p + ' ' + esc(plan.cluster || NOMBRE_PRIO[plan.p] || '') + '</span><small>' + esc([plan.ventana, plan.espera ? 'espera máx. ' + plan.espera + ' min' : ''].filter(Boolean).join(', ')) + '</small>' : '<span class="pp-tag sin">Sin prioridad en la hoja</span>') + '</span>' +
+        (c.importe != null ? '<span class="pp-imp">' + plata(c.importe) + '</span>' : '') + '</li>';
+    }).join('') + '</ol>';
+    if (pr) h += '<p class="pp-pie">Hoja PL4.2 Carga ruteo leída a las ' + hhmm(pr.at) + '.</p>';
+    return h;
+  }
+
   function detalle(cam) {
     var pat = String(cam.patente).toUpperCase();
     var nbCli = (nb && nb.cli && nb.cli.p && nb.cli.p[pat]) || {};
@@ -219,21 +344,8 @@
         lista.map(function (c) { return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b></td><td>' + esc(c.domicilio) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
 
-    // Con Chess: cruza cada cliente con su estado en Nextbyn (por código, o por nombre).
-    var porNombre = {};
-    Object.keys(nbCli).forEach(function (k) { porNombre[nz(nbCli[k].nombre)] = nbCli[k]; });
-    var cs = dc.clientes.map(function (c0) {
-      var c = Object.assign({}, c0);
-      var id = (/^\s*(\d+)/.exec(c.cliente) || [])[1];
-      var x = (id && nbCli[id]) || porNombre[nz(String(c.cliente).replace(/^\s*\d+\s*-\s*/, ''))];
-      c.leidoNextbyn = !!x;
-      c.nbEstado = x ? x.estado : '';
-      c.est = c.rechazado ? 'rechazado' : c.parcial ? 'parcial' : c.entregado ? 'entregado' : '';
-      var s = x && estadoNextbyn(x.estado);
-      if (s === 'rechazado' || s === 'parcial') c.est = s;
-      else if (s === 'entregado' && !c.est) c.est = 'entregado';
-      return c;
-    });
+    // Con Chess: cruza cada cliente con su estado en Nextbyn.
+    var cs = cruzar(dc, nbCli);
     cs.sort(function (a, b) { return orden(a) - orden(b) || String(a.cliente).localeCompare(b.cliente); });
     var nRe = cs.filter(function (c) { return c.est === 'rechazado' || c.est === 'parcial'; }).length;
     var nEnt = cs.filter(function (c) { return c.est === 'entregado'; }).length;
@@ -323,7 +435,8 @@
         '<div class="c-chapa">' + chapa(e.patente) + '<span class="veh">' + esc(e.vehiculo) + '</span></div>' +
         '<div class="estado"><b><i></i>' + esc(e.txt) + '</b>' +
         e.alertas.filter(function (a) { return a.indexOf('Cerró la jornada') !== 0; }).map(function (a) { return '<span class="al">' + esc(a) + '</span>'; }).join('') +
-        (e.aviso ? '<span class="al sec">' + esc(e.aviso) + '</span>' : '') + '</div>' +
+        (e.aviso ? '<span class="al sec">' + esc(e.aviso) + '</span>' : '') +
+        (e.estado === 'ABIERTA' && e.pendientes ? '<button type="button" class="prio" data-prio="' + esc(e.patente) + '" aria-haspopup="dialog">Prioridad pedidos pendientes <span>' + cantidadPendientes(e) + '</span></button>' : '') + '</div>' +
         lineaDelDia(e, E, ahora) +
         '<div class="c-cli n"><span class="big">' + e.hechos + '</span><span style="color:var(--tenue)">/' + e.total + '</span>' +
         '<div class="avance" title="' + e.entregados + ' entregados, ' + e.parciales + ' parciales, ' + e.rechazos + ' rechazos, ' + e.pendientes + ' pendientes"><i class="e" style="width:' + ancho(e.entregados) + '%"></i><i class="p" style="width:' + ancho(e.parciales) + '%"></i><i class="r" style="width:' + ancho(e.rechazos) + '%"></i></div></div>' +
@@ -347,6 +460,7 @@
       'Línea punteada vertical: fin objetivo. Franja rayada: ventana de apertura (' + ventanaApertura(ahora).join(' a ') + '). ' +
       'Ritmo = clientes visitados por hora desde el inicio de jornada. "Visita hace" se mide desde que este reporte vio el último cambio.</p>';
     $('contenido').innerHTML = h;
+    if (popPat) refrescarPopover();
   }
 
   // ---------- eventos ----------
@@ -355,7 +469,66 @@
   $('b-nb').addEventListener('click', function () { actualizar('nextbyn'); });
   $('b-ch').addEventListener('click', function () { actualizar('chess'); });
   $('auto').addEventListener('change', function () { programar(); pintarSub(); });
+  // ---------- vista previa de prioridad (hover, foco o toque) ----------
+  var pop = document.createElement('div');
+  pop.className = 'pp';
+  pop.setAttribute('role', 'dialog');
+  pop.hidden = true;
+  document.body.appendChild(pop);
+  var popPat = '', popBtn = null, popFijo = false, popCierre = null;
+  function abrirPopover(btn, fijo) {
+    clearTimeout(popCierre);
+    popBtn = btn; popPat = btn.getAttribute('data-prio'); popFijo = !!fijo;
+    pop.innerHTML = vistaPrioridad(popPat);
+    pop.setAttribute('aria-label', 'Prioridad de pedidos pendientes de ' + popPat);
+    pop.hidden = false;
+    var r = btn.getBoundingClientRect(), w = pop.offsetWidth, hgt = pop.offsetHeight;
+    var x = Math.min(Math.max(8, r.left), window.innerWidth - w - 8);
+    var y = r.bottom + 6;
+    if (y + hgt > window.innerHeight - 8 && r.top - hgt - 6 > 8) y = r.top - hgt - 6;
+    pop.style.left = x + window.scrollX + 'px';
+    pop.style.top = y + window.scrollY + 'px';
+  }
+  function cerrarPopover() { pop.hidden = true; popPat = ''; popBtn = null; popFijo = false; }
+  function cerrarLuego() { clearTimeout(popCierre); popCierre = setTimeout(function () { if (!popFijo) cerrarPopover(); }, 180); }
+  function refrescarPopover() {
+    if (!popPat) return;
+    var b = document.querySelector('button.prio[data-prio="' + popPat.replace(/"/g, '') + '"]');
+    if (b) abrirPopover(b, popFijo); else cerrarPopover();
+  }
+  $('contenido').addEventListener('mouseover', function (ev) {
+    var b = ev.target.closest && ev.target.closest('button.prio');
+    if (b && !popFijo && b !== popBtn) abrirPopover(b, false);
+    else if (b) clearTimeout(popCierre);
+  });
+  $('contenido').addEventListener('mouseout', function (ev) {
+    var b = ev.target.closest && ev.target.closest('button.prio');
+    if (b && !b.contains(ev.relatedTarget) && !pop.contains(ev.relatedTarget)) cerrarLuego();
+  });
+  pop.addEventListener('mouseenter', function () { clearTimeout(popCierre); });
+  pop.addEventListener('mouseleave', cerrarLuego);
+  $('contenido').addEventListener('focusin', function (ev) {
+    var b = ev.target.closest && ev.target.closest('button.prio');
+    if (b && !popFijo) abrirPopover(b, false);
+  });
+  $('contenido').addEventListener('focusout', function (ev) {
+    var b = ev.target.closest && ev.target.closest('button.prio');
+    if (b && !popFijo) cerrarLuego();
+  });
+  document.addEventListener('keydown', function (ev) { if (ev.key === 'Escape' && popPat) { var b = popBtn; cerrarPopover(); if (b) b.focus(); } });
+  document.addEventListener('click', function (ev) {
+    if (popPat && !pop.contains(ev.target) && !(ev.target.closest && ev.target.closest('button.prio'))) cerrarPopover();
+  });
+  window.addEventListener('resize', function () { if (popPat) cerrarPopover(); });
+
   $('contenido').addEventListener('click', function (ev) {
+    var bp = ev.target.closest('button.prio');
+    if (bp) {
+      ev.stopPropagation();
+      // Clic o toque: deja la vista fija (en el celular no hay hover). Otro clic la cierra.
+      if (popFijo && popBtn === bp) cerrarPopover(); else abrirPopover(bp, true);
+      return;
+    }
     var cl = ev.target.closest('tr.cl');
     if (cl) { var k = cl.getAttribute('data-cl'); clientesAbiertos[k] = !clientesAbiertos[k]; pintar(); return; }
     var ir = ev.target.closest('li[data-ir]');
@@ -370,6 +543,7 @@
     if (fila) alternar(fila.getAttribute('data-p'));
   });
   $('contenido').addEventListener('keydown', function (ev) {
+    if (ev.target.closest && ev.target.closest('button.prio')) return;
     var fila = ev.target.closest && ev.target.closest('.fila');
     if (fila && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); alternar(fila.getAttribute('data-p')); }
   });

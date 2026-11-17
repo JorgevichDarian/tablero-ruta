@@ -12,6 +12,10 @@ Una página web no puede leer Nextbyn ni Chess por su cuenta: Chrome no deja que
 1. **Extensión de Chrome** (`extension/`): cuando el reporte se lo pide, lee el Mapa de entregas de Nextbyn y el Reporte de Repartos de Chess con la sesión de quien la usa. Si esas páginas no están abiertas, las abre un momento en una pestaña de fondo y la cierra al terminar. Solo le responde al reporte publicado en `darianjorgevich.github.io`.
 2. **Reporte** (`docs/`, publicado con GitHub Pages): la página con los botones **Actualizar todo**, **Nextbyn** y **Chess**, el semáforo por camión, las alertas y el detalle de clientes. El mismo reporte se abre también desde el ícono de la extensión.
 
+## Prioridad de pedidos pendientes
+
+Cada camión en ruta tiene el botón **Prioridad pedidos pendientes**. Al pasar el mouse muestra sus pendientes ordenados por la **Prioridad en el ruteo** de la pestaña `PL4.2 Carga ruteo` de la hoja *4.2 Plan de agrupación de clientes* (1 Ganador, 2 Básico, 3 En crecimiento, 4 Ventas bajas) y, dentro de cada prioridad, por importe. La extensión lee la hoja con la sesión de Google del usuario (cada 1 hora como máximo); el cruce es por código de cliente.
+
 ## Horarios de referencia
 
 | | Apertura de ruta | Fin de jornada |
