@@ -9,7 +9,7 @@
 <body>
 <header>
   <div class="tit">
-    <h1>Tablero de ruta · Logística Total <span class="ver">reporte v1.0.1</span></h1>
+    <h1>Tablero de ruta · Logística Total <span class="ver">reporte v1.0.2</span></h1>
     <div class="sub" id="sub">Tocá «Actualizar todo» para traer los datos.</div>
   </div>
   <div class="sp"></div>
@@ -22,14 +22,69 @@
   <div class="cfg">
     <label id="l-obj">Fin objetivo<input id="obj" inputmode="numeric" maxlength="5"></label>
     <label>Alerta sin avance (min)<input id="sin" inputmode="numeric" maxlength="3"></label>
-    <a class="guia" href="https://darianjorgevich.github.io/tablero-ruta/guia.html" target="_blank" rel="noopener">Guía</a>
   </div>
 </header>
+<nav class="tabs" role="tablist">
+  <a href="#tablero" id="tab-tablero" role="tab">Tablero</a>
+  <a href="#guia" id="tab-guia" role="tab">Guía instalación extensión</a>
+</nav>
 <main id="main">
   <div id="aviso"></div>
   <div class="msg" id="vacio">Todavía no hay datos. Tocá <b>Actualizar todo</b>: la extensión lee Nextbyn y Chess con tu sesión (si no tenés esas páginas abiertas, las abre un momento en segundo plano).</div>
   <div id="contenido"></div>
 </main>
+<section id="guia" class="guia-vista" hidden>
+<h2 class="gt">Guía de instalación de la extensión</h2>
+<p class="lead">Reporte en vivo del estado de cada camión. Los datos los trae una extensión de Chrome, que lee Nextbyn y Chess con tu propia sesión.</p>
+
+<div class="gcard"><h2>1 · Instalar la extensión (una vez por PC)</h2>
+<ol>
+<li>Descargá la extensión y descomprimila en una carpeta que no vayas a borrar (por ejemplo <code>Documentos\tablero-ruta</code>):
+<div><a class="btn" href="https://darianjorgevich.github.io/tablero-ruta/tablero-ruta-extension.zip" download>Descargar extensión</a></div></li>
+<li>En Chrome, abrí <code>chrome://extensions</code> (copialo y pegalo en la barra de direcciones).</li>
+<li>Arriba a la derecha, activá <b>Modo de desarrollador</b>.</li>
+<li>Tocá <b>Cargar descomprimida</b> y elegí la carpeta que descomprimiste (la que tiene el archivo <code>manifest.json</code>).</li>
+<li>Fijá la extensión: tocá el ícono de rompecabezas de Chrome y el pin al lado de <b>Tablero de ruta</b>.</li>
+</ol></div>
+
+<div class="gcard"><h2>2 · Usar el reporte</h2>
+<ol>
+<li>Entrá a <b>Nextbyn</b> y a <b>Chess</b> con tu usuario en este Chrome (alcanza con haber iniciado sesión; no hace falta dejar las pestañas abiertas).</li>
+<li>Abrí el reporte: la pestaña <a href="#tablero">Tablero</a> de esta misma página, o tocando el ícono de la extensión.</li>
+<li>Botones de arriba:
+<ul>
+<li><b>Actualizar todo</b>: lee Nextbyn y Chess.</li>
+<li><b>Nextbyn</b> / <b>Chess</b>: leen solo esa fuente. Al lado figura la hora de los últimos datos; si aparece ⚠, pasá el mouse para ver qué pasó.</li>
+<li><b>Auto cada 5 min</b>: vuelve a leer todo solo mientras el reporte esté abierto.</li>
+</ul></li>
+<li>Si no tenés Nextbyn o Chess abiertos, la extensión los abre un momento en una pestaña de fondo y la cierra al terminar. Si la tabla de clientes de Nextbyn no se carga de fondo, muestra esa pestaña un segundo y vuelve.</li>
+<li>Tocá un camión para ver sus clientes, y un cliente para ver sus productos.</li>
+</ol></div>
+
+<div class="gcard"><h2>3 · Horarios de referencia</h2>
+<table>
+<tr><td></td><td><b>Apertura de ruta</b></td><td><b>Fin de jornada</b></td></tr>
+<tr><td>Lunes a viernes</td><td>07:30 a 08:00</td><td>15:00</td></tr>
+<tr><td>Sábados</td><td>08:00 a 08:30</td><td>13:00</td></tr>
+</table>
+<p class="mut">El fin de jornada es la hora objetivo del semáforo (se puede cambiar arriba en el reporte; cada PC recuerda su valor). Si un camión levanta ruta fuera de la ventana de apertura, aparece un aviso amarillo debajo de su estado, sin cambiar el semáforo.</p></div>
+
+<div class="gcard"><h2>4 · Cómo leer el semáforo</h2>
+<ul>
+<li><b>Rojo:</b> con el ritmo actual termina más de 1 h después del objetivo, lleva más de 45 min de jornada sin visitas, o cerró con clientes pendientes.</li>
+<li><b>Amarillo:</b> termina hasta 1 h después del objetivo, o la jornada tiene un inicio anómalo (abierta desde la madrugada).</li>
+<li><b>Azul:</b> salió hace menos de 45 min: todavía no hay ritmo.</li>
+<li><b>Verde:</b> termina antes del objetivo, o no tiene pendientes y le falta cerrar.</li>
+<li><b>Gris:</b> jornada cerrada sin pendientes.</li>
+</ul></div>
+
+<div class="gcard"><h2>Para tener en cuenta</h2>
+<ul class="mut">
+<li>Si la sesión de Nextbyn o de Chess vence, el reporte lo avisa: entrá de nuevo y tocá Actualizar.</li>
+<li>La extensión solo le pasa datos a este reporte (darianjorgevich.github.io). Los datos no se guardan en ningún servidor: quedan en el Chrome de quien lo usa.</li>
+<li>Para actualizar la extensión: descargá la nueva versión, reemplazá los archivos de la carpeta y en <code>chrome://extensions</code> tocá el botón de recargar de <b>Tablero de ruta</b>.</li>
+</ul></div>
+</section>
 <script src="reporte.js"></script>
 </body>
 </html>

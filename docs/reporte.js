@@ -6,7 +6,7 @@
   'use strict';
 
   var EXT_ID = 'npppbmphladglegjkaakkakllgnhmmgn';
-  var GUIA = 'https://darianjorgevich.github.io/tablero-ruta/guia.html';
+  var GUIA = '#guia';
   var CADA = 5 * 60 * 1000;
   var CLAVE_CFG = 'ltReporteCfg';
   var CLAVE_HIST = 'ltReporteHist';
@@ -229,7 +229,7 @@
     pintarSub();
     var av = '';
     if (sinExtension) {
-      av += '<div class="err">Para traer los datos hace falta la extensión <b>Tablero de ruta</b> en este Chrome. <a href="' + GUIA + '" target="_blank" rel="noopener">Cómo instalarla</a>.</div>';
+      av += '<div class="err">Para traer los datos hace falta la extensión <b>Tablero de ruta</b> en este Chrome. <a href="' + GUIA + '">Cómo instalarla</a>.</div>';
     } else {
       if (errNb) av += '<div class="err">Nextbyn: ' + esc(errNb) + (nb ? ' Se muestran los datos de las ' + hhmm(nb.at) + '.' : '') + '</div>';
       if (errCh) av += '<div class="err">Chess: ' + esc(errCh) + (ch ? ' Se muestran los datos de las ' + hhmm(ch.at) + '.' : '') + '</div>';
@@ -304,6 +304,20 @@
     cfg.sinAvance = +e.target.value; guardarLS(CLAVE_CFG, cfg); pintar();
   });
   setInterval(pintarSub, 1000);
+
+  // ---------- pestañas: Tablero / Guía instalación extensión ----------
+  function mostrarVista() {
+    var guia = location.hash === '#guia';
+    $('main').hidden = guia;
+    $('guia').hidden = !guia;
+    document.body.classList.toggle('ver-guia', guia);
+    $('tab-tablero').classList.toggle('act', !guia);
+    $('tab-guia').classList.toggle('act', guia);
+    $('tab-tablero').setAttribute('aria-selected', String(!guia));
+    $('tab-guia').setAttribute('aria-selected', String(guia));
+  }
+  window.addEventListener('hashchange', function () { mostrarVista(); window.scrollTo(0, 0); });
+  mostrarVista();
 
   pintar();
   actualizarTodo();

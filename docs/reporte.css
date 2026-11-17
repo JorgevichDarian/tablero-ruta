@@ -57,3 +57,22 @@ tr.prod td{background:#fcfcfd;font-size:12px;color:#3b4252;padding:4px 10px 8px 
 tr.prod table td{padding:2px 10px;border:0}
 .nota{font-size:11px;color:#6b7280;margin-top:6px}
 @media (max-width:700px){header{padding:10px 16px}main{padding:12px 16px 30px}h1{font-size:15px}}
+/* pestañas */
+nav.tabs{display:flex;gap:4px;padding:0 20px;background:#2a3142;overflow-x:auto}
+nav.tabs a{color:#cfd4dd;text-decoration:none;font-weight:600;padding:9px 14px;border-bottom:3px solid transparent}
+nav.tabs a:hover{color:#fff}
+nav.tabs a.act{color:#fff;border-bottom-color:#fff}
+body.ver-guia header .fuentes,body.ver-guia header .cfg{display:none}
+/* guía */
+.guia-vista{max-width:820px;margin:0 auto;padding:24px 20px 60px;font-size:15px;line-height:1.55}
+.guia-vista .gt{font-size:22px;margin:0 0 6px}
+.guia-vista h2{font-size:17px;margin:0 0 10px}
+.guia-vista .lead{color:var(--mut);margin:0 0 20px}
+.guia-vista .gcard{background:var(--card);border:1px solid #e6e8ec;border-radius:12px;padding:20px 22px;margin-bottom:16px}
+.guia-vista ol,.guia-vista ul{margin:0;padding-left:22px}
+.guia-vista li{margin:8px 0}
+.guia-vista a.btn{display:inline-block;background:var(--head);color:#fff;text-decoration:none;font-weight:700;padding:10px 18px;border-radius:8px;margin:6px 8px 6px 0}
+.guia-vista code{font:13px ui-monospace,Menlo,monospace;background:var(--bg);border:1px solid #e6e8ec;border-radius:4px;padding:1px 5px}
+.guia-vista table{font-size:14px}
+.guia-vista td{white-space:normal;border-bottom:1px solid #e6e8ec;padding:8px 6px}
+.guia-vista .mut{color:var(--mut);font-size:13.5px}

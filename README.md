@@ -3,7 +3,7 @@
 Reporte en vivo del estado de cada camión de reparto, con datos de **Nextbyn** (avance, estado de entrega de cada cliente) y **Chess** (planillas, importes, bultos y cajones retornables).
 
 - **Reporte publicado:** https://darianjorgevich.github.io/tablero-ruta/
-- **Guía de instalación:** https://darianjorgevich.github.io/tablero-ruta/guia.html
+- **Guía de instalación:** pestaña "Guía instalación extensión" del reporte (https://darianjorgevich.github.io/tablero-ruta/#guia)
 
 ## Cómo funciona
 
@@ -37,7 +37,7 @@ extension/          Extensión de Chrome (se instala con "Cargar descomprimida")
   reporte.*         El reporte (el mismo que se publica)
 docs/               Lo que publica GitHub Pages (generado por scripts/build.js)
 scripts/build.js    Copia el reporte a docs/ y arma el zip de la extensión
-scripts/guia.html   Guía de instalación
+scripts/guia.html   Redirige a la pestaña de la guía (para enlaces viejos)
 marcador/           Versión anterior (marcador sobre Nextbyn, v12), por si se necesita
 ```
 
