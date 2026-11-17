@@ -11,6 +11,7 @@
   var CLAVE_CFG = 'ltReporteCfg';
   var CLAVE_HIST = 'ltReporteHist';
   var CLAVE_DATOS = 'ltReporteDatos';
+  var COLOR = { rojo: 'var(--rojo)', amarillo: 'var(--ambar)', verde: 'var(--verde)', azul: 'var(--azul)', gris: 'var(--gris)' };
 
   // ---------- utilidades ----------
   function $(id) { return document.getElementById(id); }
@@ -24,6 +25,7 @@
   function aHora(base, s) { var m = /^(\d{1,2}):(\d{2})$/.exec(s || '') || [0, 18, 0]; var d = new Date(base); d.setHours(+m[1], +m[2], 0, 0); return d; }
   function sabado(d) { return (d || new Date()).getDay() === 6; }
   function nz(s) { return String(s || '').toUpperCase().normalize('NFD').replace(/[^A-Z0-9]/g, ''); }
+  function chapa(p) { return '<span class="chapa"><span>' + esc(p) + '</span></span>'; }
 
   // ---------- configuración ----------
   var cfg = Object.assign({ objLV: '15:00', objSab: '13:00', sinAvance: 45 }, leerLS(CLAVE_CFG, {}));
@@ -109,7 +111,7 @@
       if (e.estado === 'CERRADA') {
         if (e.pendientes > 0) { e.sem = 'rojo'; e.txt = 'Cerró con ' + e.pendientes + ' pendientes'; e.alertas.push('Cerró la jornada con ' + e.pendientes + ' clientes pendientes'); }
         else { e.sem = 'gris'; e.txt = 'Finalizado'; }
-      } else if (e.pendientes === 0) { e.sem = 'verde'; e.txt = 'Sin pendientes · falta cerrar'; }
+      } else if (e.pendientes === 0) { e.sem = 'verde'; e.txt = 'Sin pendientes, falta cerrar'; }
       else if (ini && ini.getHours() < 4) { e.sem = 'amarillo'; e.txt = 'Inicio anómalo'; e.ritmo = null; e.alertas.push('Jornada iniciada a las ' + hhmm(ini) + ': revisar si quedó abierta de antes'); }
       else if (h !== null && h < 0.75) { e.sem = 'azul'; e.txt = 'Recién sale'; }
       else if (e.ritmo) {
@@ -128,6 +130,61 @@
     return res.sort(function (a, b) { return a.orden - b.orden; });
   }
 
+  // ---------- escala de la línea del día ----------
+  function escala(cams, ahora) {
+    var desde = 6, hasta = Math.max(aHora(ahora, objetivo(ahora)).getHours() + 2, ahora.getHours() + 1);
+    cams.forEach(function (e) {
+      var i = e.inicio && new Date(e.inicio);
+      if (i && i.getHours() >= 4) desde = Math.min(desde, i.getHours());
+      if (e.fin && e.fin.toDateString() === ahora.toDateString()) hasta = Math.max(hasta, Math.ceil(e.fin.getHours() + e.fin.getMinutes() / 60));
+    });
+    hasta = Math.min(Math.max(hasta, desde + 6), 22);
+    var a = aHora(ahora, ('0' + desde).slice(-2) + ':00').getTime();
+    var b = aHora(ahora, ('0' + hasta).slice(-2) + ':00').getTime();
+    return {
+      desde: desde, hasta: hasta,
+      x: function (t) { t = +new Date(t); return Math.max(0, Math.min(100, ((t - a) / (b - a)) * 100)); },
+      fuera: function (t) { return +new Date(t) > b; },
+    };
+  }
+
+  function lineaDelDia(e, E, ahora) {
+    var v = ventanaApertura(ahora), obj = aHora(ahora, objetivo(ahora));
+    var c = '<div class="dia" title="' + esc(lineaTitulo(e)) + '"><div class="carril"></div>' +
+      '<div class="ventana" style="left:' + E.x(aHora(ahora, v[0])) + '%;width:' + (E.x(aHora(ahora, v[1])) - E.x(aHora(ahora, v[0]))) + '%"></div>';
+    var ini = e.inicio ? new Date(e.inicio) : null;
+    var xi = ini && ini.getHours() >= 4 ? E.x(ini) : 0;
+    var xa = E.x(ahora);
+    if (ini) {
+      c += '<div class="hecho" style="left:' + xi + '%;width:' + Math.max(0, xa - xi) + '%' + (e.estado === 'CERRADA' ? ';opacity:.35' : '') + '"></div>';
+      if (ini.getHours() >= 4) c += '<div class="ini" style="left:' + xi + '%"></div>';
+    }
+    if (e.fin) {
+      var fuera = E.fuera(e.fin), xf = fuera ? 100 : E.x(e.fin);
+      c += '<div class="proy" style="left:' + xa + '%;width:' + Math.max(0, xf - xa) + '%"></div>';
+      c += '<div class="fin' + (fuera ? ' fuera' : '') + '" style="left:' + xf + '%"></div>';
+    }
+    c += '<div class="obj" style="left:' + E.x(obj) + '%"></div><div class="ahora" style="left:' + xa + '%"></div></div>';
+    return c;
+  }
+  function lineaTitulo(e) {
+    var t = 'Inicio ' + hhmm(e.inicio);
+    if (e.fin) t += ', fin estimado ' + hhmm(e.fin);
+    return t;
+  }
+
+  function eje(E, ahora) {
+    var h = '<div class="reloj">';
+    var paso = E.hasta - E.desde > 10 ? 2 : 1;
+    for (var x = E.desde; x <= E.hasta; x += paso) {
+      h += '<span style="left:' + ((x - E.desde) / (E.hasta - E.desde)) * 100 + '%">' + ('0' + x).slice(-2) + ':00</span>';
+    }
+    var obj = aHora(ahora, objetivo(ahora));
+    h += '<span class="tag o" style="left:' + E.x(obj) + '%">Fin ' + objetivo(ahora) + '</span>';
+    h += '<span class="tag a" style="left:' + E.x(ahora) + '%">' + hhmm(ahora) + '</span>';
+    return h + '</div>';
+  }
+
   // ---------- clientes de un camión ----------
   function estadoNextbyn(s) {
     if (/RECHAZO.*PARCIAL|PARCIAL/.test(s)) return 'parcial';
@@ -136,12 +193,13 @@
     return '';
   }
   function pillEstado(c) {
-    if (c.est === 'rechazado') return '<span class="pill p-re">✕ Rechazado</span>';
-    if (c.est === 'parcial') return '<span class="pill p-re">◐ Rechazo parcial</span>';
-    if (c.est === 'entregado') return '<span class="pill p-ok">✓ Entregado</span>';
+    if (c.est === 'rechazado') return '<span class="pill p-re">Rechazado</span>';
+    if (c.est === 'parcial') return '<span class="pill p-re">Rechazo parcial</span>';
+    if (c.est === 'entregado') return '<span class="pill p-ok">Entregado</span>';
     if (c.nbEstado) return '<span class="pill p-pe">' + esc(c.nbEstado.replace(/_/g, ' ').toLowerCase().replace(/^./, function (x) { return x.toUpperCase(); })) + '</span>';
     return '<span class="pill p-pe">' + (c.leidoNextbyn ? 'Pendiente' : 'En reparto') + '</span>';
   }
+  function orden(c) { return { rechazado: 0, parcial: 0, '': 1, entregado: 2 }[c.est || '']; }
 
   function detalle(cam) {
     var pat = String(cam.patente).toUpperCase();
@@ -156,9 +214,9 @@
       if (!ids.length) return '<div class="dres">' + msg + '</div>';
       var lista = ids.map(function (id) { var x = nbCli[id]; return { cliente: (id.indexOf('N:') ? id + ' - ' : '') + x.nombre, domicilio: x.domicilio, nbEstado: x.estado, leidoNextbyn: true, est: estadoNextbyn(x.estado) }; });
       lista.sort(function (a, b) { return orden(a) - orden(b) || a.cliente.localeCompare(b.cliente); });
-      return '<div class="dres"><span>' + msg + '</span><span>Clientes: <b>' + lista.length + '</b> · entregados: <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span></div>' +
-        '<table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th>Domicilio</th></tr></thead><tbody>' +
-        lista.map(function (c) { return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b></td><td>' + esc(c.domicilio) + '</td></tr>'; }).join('') + '</tbody></table>';
+      return '<div class="dres"><span>' + msg + '</span><span>Clientes <b>' + lista.length + '</b></span><span>Entregados <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span></div>' +
+        '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th>Domicilio</th></tr></thead><tbody>' +
+        lista.map(function (c) { return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b></td><td>' + esc(c.domicilio) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
 
     // Con Chess: cruza cada cliente con su estado en Nextbyn (por código, o por nombre).
@@ -179,50 +237,47 @@
     cs.sort(function (a, b) { return orden(a) - orden(b) || String(a.cliente).localeCompare(b.cliente); });
     var nRe = cs.filter(function (c) { return c.est === 'rechazado' || c.est === 'parcial'; }).length;
     var nEnt = cs.filter(function (c) { return c.est === 'entregado'; }).length;
-    var h = '<div class="dres"><span>Chofer: <b>' + esc(String(dc.chofer || '').replace(/^\d+\s*-\s*/, '')) + '</b></span>' +
-      '<span>Planillas: <b>' + esc(dc.planillas.join(', ')) + '</b></span>' +
-      '<span>Clientes: <b>' + cs.length + '</b> · entregados: <b>' + nEnt + '</b>' + (nRe ? ' · rechazos: <b>' + nRe + '</b>' : '') + '</span>' +
-      '<span>Importe: <b>' + plata(dc.importe) + '</b></span><span>Bultos: <b>' + Math.round(dc.bultos) + '</b></span>' +
-      '<span>Cajones retornables: <b>' + Math.round(dc.cajones) + '</b></span>' +
-      (hayNb ? '' : '<span>⚠ Sin estados de Nextbyn: el estado sale de Chess.</span>') + '</div>' +
-      '<table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th>Domicilio</th><th>Localidad</th><th>Comprobante</th><th class="n">Importe</th><th class="n">Bultos</th><th class="n">Cajones RET</th></tr></thead><tbody>';
+    var h = '<div class="dres"><span>Chofer <b>' + esc(String(dc.chofer || '').replace(/^\d+\s*-\s*/, '')) + '</b></span>' +
+      '<span>Planillas <b>' + esc(dc.planillas.join(', ')) + '</b></span>' +
+      '<span>Clientes <b>' + cs.length + '</b></span><span>Entregados <b>' + nEnt + '</b></span>' + (nRe ? '<span>Rechazos <b>' + nRe + '</b></span>' : '') +
+      '<span>Importe <b>' + plata(dc.importe) + '</b></span><span>Bultos <b>' + Math.round(dc.bultos) + '</b></span>' +
+      '<span>Cajones retornables <b>' + Math.round(dc.cajones) + '</b></span>' +
+      (hayNb ? '' : '<span>Sin estados de Nextbyn: el estado sale de Chess.</span>') + '</div>' +
+      '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-dom">Domicilio</th><th class="h-loc">Localidad</th><th class="h-comp">Comprobante</th><th class="n">Importe</th><th class="n">Bultos</th><th class="n">Cajones</th></tr></thead><tbody>';
     cs.forEach(function (c) {
       var k = pat + '|' + c.cliente, abierto = !!clientesAbiertos[k];
       h += '<tr class="cl" data-cl="' + esc(k) + '"><td>' + pillEstado(c) +
-        (c.motivos && c.motivos.length ? '<span class="al" style="margin-left:0">' + esc(c.motivos.join(', ')) + '</span>' : '') +
-        '</td><td><span class="car' + (abierto ? ' rot' : '') + '">▸</span><b>' + esc(c.cliente) + '</b></td><td>' + esc(c.domicilio) + '</td><td>' + esc(c.localidad) +
-        '</td><td style="font-size:11.5px">' + esc(c.comprobantes.join(' · ')) + '</td><td class="n">' + plata(c.importe) + '</td><td class="n">' + num(c.bultos) + '</td><td class="n">' + num(c.cajones) + '</td></tr>';
+        (c.motivos && c.motivos.length ? '<span class="motivo">' + esc(c.motivos.join(', ')) + '</span>' : '') +
+        '</td><td><span class="car' + (abierto ? ' rot' : '') + '">▸</span><b>' + esc(c.cliente) + '</b></td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-loc">' + esc(c.localidad) +
+        '</td><td class="h-comp" style="font-size:13px">' + esc(c.comprobantes.join(', ')) + '</td><td class="n">' + plata(c.importe) + '</td><td class="n">' + num(c.bultos) + '</td><td class="n">' + num(c.cajones) + '</td></tr>';
       if (abierto) {
         h += '<tr class="prod"><td colspan="8"><table>' + c.items.map(function (it) {
-          return '<tr><td>' + (it.rechazado ? '✕ ' : '') + esc(it.articulo) + (it.ret ? ' <span class="pill p-pe">RET</span>' : '') + '</td><td class="n">' + num(it.bultos) + ' bultos</td><td class="n">' + plata(it.importe) + '</td></tr>';
+          return '<tr><td>' + (it.rechazado ? 'Rechazado: ' : '') + esc(it.articulo) + (it.ret ? ' <span class="pill p-pe">RET</span>' : '') + '</td><td class="n">' + num(it.bultos) + ' bultos</td><td class="n">' + plata(it.importe) + '</td></tr>';
         }).join('') + '</table></td></tr>';
       }
     });
-    return h + '</tbody></table>';
+    return h + '</tbody></table></div>';
   }
-  function orden(c) { return { rechazado: 0, parcial: 0, '': 1, entregado: 2 }[c.est || ''] ; }
 
   // ---------- pintar ----------
+  function pintarFuente(btn, hora, ocup, err, datos) {
+    btn.disabled = ocup;
+    btn.className = 'fuente' + (ocup ? ' leyendo' : err ? ' error' : datos ? ' ok' : '');
+    hora.textContent = ocup ? 'leyendo…' : err ? 'error' : datos ? hhmm(datos.at) : 'sin datos';
+  }
   function pintarBotones() {
-    $('b-nb').disabled = ocupado.nextbyn;
-    $('b-ch').disabled = ocupado.chess;
+    pintarFuente($('b-nb'), $('t-nb'), ocupado.nextbyn, errNb, nb);
+    pintarFuente($('b-ch'), $('t-ch'), ocupado.chess, errCh, ch);
     $('b-todo').disabled = ocupado.nextbyn && ocupado.chess;
-    var tn = $('t-nb'), tc = $('t-ch');
-    tn.textContent = ocupado.nextbyn ? 'leyendo…' : errNb ? '⚠' : nb ? hhmm(nb.at) : '—';
-    tc.textContent = ocupado.chess ? 'leyendo…' : errCh ? '⚠' : ch ? hhmm(ch.at) : '—';
-    tn.className = 'hora' + (errNb && !ocupado.nextbyn ? ' err' : '');
-    tc.className = 'hora' + (errCh && !ocupado.chess ? ' err' : '');
     $('b-nb').title = errNb || (nb ? 'Datos de Nextbyn de las ' + hhmm(nb.at) + '. Tocá para volver a leer.' : 'Leer Nextbyn');
     $('b-ch').title = errCh || (ch ? 'Datos de Chess de las ' + hhmm(ch.at) + '. Tocá para volver a leer.' : 'Leer Chess');
   }
 
   function pintarSub() {
-    var t = nb ? 'Datos de Nextbyn de las ' + hhmm(nb.at) + ' · ' + ((nb.cli && nb.cli.n) || 0) + ' clientes con estado' : 'Sin datos de Nextbyn todavía';
-    if (proxima) { var s = Math.max(0, Math.round((proxima - Date.now()) / 1000)); t += ' · próxima actualización en ' + Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
-    $('sub').textContent = t;
+    var t = nb ? 'Datos de Nextbyn de las ' + hhmm(nb.at) + ', ' + ((nb.cli && nb.cli.n) || 0) + ' clientes con estado.' : '';
+    if (proxima) { var s = Math.max(0, Math.round((proxima - Date.now()) / 1000)); t += ' Próxima actualización en ' + Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2) + '.'; }
+    $('sub').textContent = t.trim();
   }
-
-  function kpi(t, v) { return '<div class="kpi"><span>' + t + '</span><b>' + v + '</b></div>'; }
 
   function pintar() {
     pintarBotones();
@@ -240,47 +295,62 @@
 
     var ahora = new Date();
     var cams = analizar(nb.cams, ahora);
-    var cuenta = { rojo: 0, amarillo: 0, verde: 0, azul: 0, gris: 0 }, tot = { h: 0, r: 0, t: 0 };
-    var alertas = [];
-    cams.forEach(function (e) {
-      cuenta[e.sem]++; tot.h += e.hechos; tot.r += e.rechazos; tot.t += e.total;
-      e.alertas.forEach(function (a) { alertas.push({ p: e.patente, a: a, s: e.sem }); });
-    });
+    var E = escala(cams, ahora);
+    var cuenta = { rojo: 0, amarillo: 0, azul: 0, verde: 0, gris: 0 }, tot = { h: 0, r: 0, t: 0 };
+    cams.forEach(function (e) { cuenta[e.sem]++; tot.h += e.hechos; tot.r += e.rechazos; tot.t += e.total; });
     var enRuta = cams.filter(function (e) { return e.estado === 'ABIERTA'; }).length;
-    var h = '<div class="kpis">' + kpi('Camiones en ruta', enRuta) + kpi('Jornadas cerradas', cams.length - enRuta) +
-      kpi('<span class="dot rojo"></span> Demorados / alerta', cuenta.rojo) + kpi('<span class="dot amarillo"></span> Ajustados / revisar', cuenta.amarillo) +
-      kpi('<span class="dot verde"></span> En horario', cuenta.verde) + kpi('Clientes visitados', tot.h + ' / ' + tot.t) +
-      kpi('Avance general', (tot.t ? Math.round((tot.h / tot.t) * 100) : 0) + '%') + kpi('Rechazos', tot.r) + '</div>';
-    if (alertas.length) {
-      h += '<div class="box"><h2>Alertas (' + alertas.length + ')</h2><ul class="alerts">' + alertas.map(function (a) {
-        return '<li><span class="dot ' + a.s + '"></span> <b>' + esc(a.p) + '</b> — ' + esc(a.a) + '</li>';
-      }).join('') + '</ul></div>';
-    }
-    h += '<div class="box"><h2>Estado por camión <small>· tocá un camión para ver sus clientes</small></h2><div class="scroll"><table><thead><tr>' +
-      '<th>Estado</th><th>Patente</th><th>Vehículo</th><th>Inicio</th><th class="n">En ruta</th><th>Avance</th><th class="n">Entreg.</th><th class="n">Parc.</th><th class="n">Rech.</th><th class="n">Pend.</th><th class="n">% Nextbyn</th><th class="n">Ritmo (cli/h)</th><th class="n">Fin estimado</th><th class="n">Últ. visita hace</th></tr></thead><tbody>';
+
+    // Resumen de la flota
+    var nombres = { rojo: 'Demorados', amarillo: 'Ajustados', azul: 'Recién salen', verde: 'En horario', gris: 'Finalizados' };
+    var h = '<section class="flota"><div><div class="comp-barra">' +
+      Object.keys(cuenta).map(function (k) { return cuenta[k] ? '<i class="' + k + '" style="width:' + (cuenta[k] / cams.length) * 100 + '%"></i>' : ''; }).join('') +
+      '</div><div class="comp-ley">' +
+      Object.keys(cuenta).map(function (k) { return '<span><i class="' + k + '"></i><b>' + cuenta[k] + '</b>' + nombres[k] + '</span>'; }).join('') +
+      '</div></div><div class="cifras">' +
+      '<div class="cifra"><b>' + enRuta + '</b><span>en ruta de ' + cams.length + '</span></div>' +
+      '<div class="cifra"><b>' + tot.h + '<small style="font-size:18px;color:var(--tenue)"> / ' + tot.t + '</small></b><span>clientes visitados</span></div>' +
+      '<div class="cifra"><b>' + (tot.t ? Math.round((tot.h / tot.t) * 100) : 0) + '%</b><span>avance general</span></div>' +
+      '<div class="cifra' + (tot.r ? ' mal' : '') + '"><b>' + tot.r + '</b><span>rechazos</span></div>' +
+      '</div></section>';
+
+    // Rutas con su línea del día
+    h += '<div class="layout"><section class="rutas" aria-label="Rutas de hoy"><div class="eje"><span>Camión</span><span>Estado</span>' + eje(E, ahora) +
+      '<span class="n">Clientes</span><span class="n">Ritmo</span><span class="n">Fin est.</span></div>';
     cams.forEach(function (e) {
-      var ancho = function (x) { return e.total ? ((x / e.total) * 110).toFixed(1) : 0; };
       var abierto = !!abiertos[e.patente];
-      h += '<tr class="cam' + (abierto ? ' open' : '') + '" data-p="' + esc(e.patente) + '"><td class="est"><span class="sem"><span class="dot ' + e.sem + '"></span>' + esc(e.txt) + '</span>' +
-        e.alertas.filter(function (a) { return a.indexOf('Cerró la jornada') !== 0; }).map(function (a) { return '<span class="al">⚠ ' + esc(a) + '</span>'; }).join('') +
-        (e.aviso ? '<span class="al sec">⚠ ' + esc(e.aviso) + '</span>' : '') +
-        '</td><td><span class="car">▸</span><b>' + esc(e.patente) + '</b></td><td>' + esc(e.vehiculo) + '</td>' +
-        '<td' + (e.tarde ? ' style="color:var(--aviso)" title="Levantó ruta ' + e.tarde + ' min después de la ventana esperada"' : '') + '>' + hhmm(e.inicio) + '</td>' +
-        '<td class="n">' + (e.estado === 'ABIERTA' ? horas(e.horas) : '—') + '</td>' +
-        '<td><div class="bar" title="' + e.hechos + ' de ' + e.total + ' clientes"><i class="e" style="width:' + ancho(e.entregados) + 'px"></i><i class="p" style="width:' + ancho(e.parciales) + 'px"></i><i class="r" style="width:' + ancho(e.rechazos) + 'px"></i></div></td>' +
-        '<td class="n">' + e.entregados + '</td><td class="n">' + e.parciales + '</td><td class="n">' + e.rechazos + '</td><td class="n">' + e.pendientes + '</td>' +
-        '<td class="n">' + (e.pct == null ? '—' : e.pct + '%') + '</td><td class="n">' + (e.ritmo ? e.ritmo.toFixed(1) : '—') + '</td>' +
-        '<td class="n">' + (e.fin ? (e.fin.toDateString() !== ahora.toDateString() ? 'mañana ' : '') + hhmm(e.fin) : '—') + '</td>' +
-        '<td class="n">' + (e.estado === 'ABIERTA' && e.pendientes ? (e.sinAvanceMin < 1 ? '<1 min' : Math.round(e.sinAvanceMin) + ' min') : '—') + '</td></tr>';
-      if (abierto) h += '<tr class="det"><td colspan="14">' + detalle(e) + '</td></tr>';
+      var ancho = function (x) { return e.total ? (x / e.total) * 100 : 0; };
+      h += '<div class="fila' + (abierto ? ' open' : '') + '" data-p="' + esc(e.patente) + '" style="--c:' + COLOR[e.sem] + '" tabindex="0" role="button" aria-expanded="' + abierto + '">' +
+        '<div class="c-chapa">' + chapa(e.patente) + '<span class="veh">' + esc(e.vehiculo) + '</span></div>' +
+        '<div class="estado"><b><i></i>' + esc(e.txt) + '</b>' +
+        e.alertas.filter(function (a) { return a.indexOf('Cerró la jornada') !== 0; }).map(function (a) { return '<span class="al">' + esc(a) + '</span>'; }).join('') +
+        (e.aviso ? '<span class="al sec">' + esc(e.aviso) + '</span>' : '') + '</div>' +
+        lineaDelDia(e, E, ahora) +
+        '<div class="c-cli n"><span class="big">' + e.hechos + '</span><span style="color:var(--tenue)">/' + e.total + '</span>' +
+        '<div class="avance" title="' + e.entregados + ' entregados, ' + e.parciales + ' parciales, ' + e.rechazos + ' rechazos, ' + e.pendientes + ' pendientes"><i class="e" style="width:' + ancho(e.entregados) + '%"></i><i class="p" style="width:' + ancho(e.parciales) + '%"></i><i class="r" style="width:' + ancho(e.rechazos) + '%"></i></div></div>' +
+        '<div class="c-ritmo n"><span class="big">' + (e.ritmo ? e.ritmo.toFixed(1) : '—') + '</span><span class="mini">cli/h</span></div>' +
+        '<div class="c-fin n"><span class="big">' + (e.fin ? hhmm(e.fin) : '—') + '</span><span class="mini">' +
+        (e.fin && e.fin.toDateString() !== ahora.toDateString() ? 'mañana' : e.estado === 'ABIERTA' && e.pendientes ? (e.sinAvanceMin < 1 ? 'visita hace <1 min' : 'visita hace ' + Math.round(e.sinAvanceMin) + ' min') : e.estado === 'CERRADA' ? 'cerrada' : '') +
+        '</span></div></div>';
+      if (abierto) h += '<div class="det">' + detalle(e) + '</div>';
     });
-    h += '</tbody></table></div></div><div class="nota">Ritmo = clientes visitados por hora desde el inicio de jornada (incluye la salida del CD). Fin estimado = ahora + pendientes ÷ ritmo. ' +
-      'Verde: termina antes de la hora objetivo · Amarillo: hasta 1 h después · Rojo: más de 1 h después, sin visitas o cerró con pendientes. ' +
-      'Horarios de referencia: apertura 07:30 a 08:00 (sábados 08:00 a 08:30) · fin 15:00 (sábados 13:00). "Últ. visita hace" se mide desde que este reporte vio el último cambio.</div>';
+    h += '</section>';
+
+    // Columna de alertas, agrupadas por camión
+    var conAlertas = cams.filter(function (e) { return e.alertas.length; });
+    var nAl = conAlertas.reduce(function (s, e) { return s + e.alertas.length; }, 0);
+    h += '<aside class="alertas"><h2>Alertas <small>' + nAl + '</small></h2>' +
+      (conAlertas.length ? '<ul>' + conAlertas.map(function (e) {
+        return '<li data-ir="' + esc(e.patente) + '" style="--c:' + COLOR[e.sem] + '">' + chapa(e.patente) + '<div>' + e.alertas.map(function (a) { return '<p>' + esc(a) + '</p>'; }).join('') + '</div></li>';
+      }).join('') + '</ul>' : '<p class="sinalertas">Sin alertas por ahora.</p>') + '</aside></div>';
+
+    h += '<p class="nota">La línea de cada camión va desde que levantó ruta hasta ahora; la parte punteada es la proyección al ritmo actual. ' +
+      'Línea punteada vertical: fin objetivo. Franja rayada: ventana de apertura (' + ventanaApertura(ahora).join(' a ') + '). ' +
+      'Ritmo = clientes visitados por hora desde el inicio de jornada. "Visita hace" se mide desde que este reporte vio el último cambio.</p>';
     $('contenido').innerHTML = h;
   }
 
   // ---------- eventos ----------
+  function alternar(p) { abiertos[p] = !abiertos[p]; pintar(); }
   $('b-todo').addEventListener('click', actualizarTodo);
   $('b-nb').addEventListener('click', function () { actualizar('nextbyn'); });
   $('b-ch').addEventListener('click', function () { actualizar('chess'); });
@@ -288,10 +358,22 @@
   $('contenido').addEventListener('click', function (ev) {
     var cl = ev.target.closest('tr.cl');
     if (cl) { var k = cl.getAttribute('data-cl'); clientesAbiertos[k] = !clientesAbiertos[k]; pintar(); return; }
-    var tr = ev.target.closest('tr.cam');
-    if (tr) { var p = tr.getAttribute('data-p'); abiertos[p] = !abiertos[p]; pintar(); }
+    var ir = ev.target.closest('li[data-ir]');
+    if (ir) {
+      var p0 = ir.getAttribute('data-ir');
+      abiertos[p0] = true; pintar();
+      var f = document.querySelector('.fila[data-p="' + p0.replace(/"/g, '') + '"]');
+      if (f) f.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      return;
+    }
+    var fila = ev.target.closest('.fila');
+    if (fila) alternar(fila.getAttribute('data-p'));
   });
-  $('l-obj').firstChild.textContent = 'Fin objetivo ' + (sabado() ? '(sáb)' : '(lun-vie)');
+  $('contenido').addEventListener('keydown', function (ev) {
+    var fila = ev.target.closest && ev.target.closest('.fila');
+    if (fila && (ev.key === 'Enter' || ev.key === ' ')) { ev.preventDefault(); alternar(fila.getAttribute('data-p')); }
+  });
+  $('l-obj').firstChild.textContent = 'Fin objetivo ' + (sabado() ? '(sábados)' : '(lun a vie)');
   $('obj').value = objetivo(new Date());
   $('sin').value = cfg.sinAvance;
   $('obj').addEventListener('change', function (e) {
@@ -303,7 +385,13 @@
     if (!(+e.target.value > 0)) { e.target.value = cfg.sinAvance; return; }
     cfg.sinAvance = +e.target.value; guardarLS(CLAVE_CFG, cfg); pintar();
   });
+  var dias = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+  var meses = ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'];
+  var d0 = new Date();
+  $('hoy').textContent = 'CD Neuquén, ' + dias[d0.getDay()] + ' ' + d0.getDate() + ' de ' + meses[d0.getMonth()];
   setInterval(pintarSub, 1000);
+  // Redibuja cada minuto para que la línea de "ahora" avance aunque no haya datos nuevos.
+  setInterval(function () { if (nb && location.hash !== '#guia') pintar(); }, 60000);
 
   // ---------- pestañas: Tablero / Guía instalación extensión ----------
   function mostrarVista() {

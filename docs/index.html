@@ -5,33 +5,39 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Tablero de ruta · Logística Total</title>
 <link rel="icon" href="icono.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow+Semi+Condensed:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="reporte.css">
 </head>
 <body>
-<header>
-  <div class="tit">
-    <h1>Tablero de ruta · Logística Total <span class="ver">reporte v1.0.2</span></h1>
-    <div class="sub" id="sub">Tocá «Actualizar todo» para traer los datos.</div>
+<header class="barra">
+  <div class="marca">
+    <h1>Tablero de ruta</h1>
+    <p class="donde"><span id="hoy">CD Neuquén</span> <span class="ver">v1.1</span></p>
   </div>
-  <div class="sp"></div>
-  <div class="fuentes">
+  <div class="fuentes" aria-label="Fuentes de datos">
+    <button id="b-nb" class="fuente"><span class="luz"></span>Nextbyn <span id="t-nb" class="hora">sin datos</span></button>
+    <button id="b-ch" class="fuente"><span class="luz"></span>Chess <span id="t-ch" class="hora">sin datos</span></button>
     <button id="b-todo" class="prim">Actualizar todo</button>
-    <button id="b-nb">Nextbyn <span id="t-nb" class="hora">—</span></button>
-    <button id="b-ch">Chess <span id="t-ch" class="hora">—</span></button>
-    <label class="chk"><input type="checkbox" id="auto" checked> Auto cada 5 min</label>
-  </div>
-  <div class="cfg">
-    <label id="l-obj">Fin objetivo<input id="obj" inputmode="numeric" maxlength="5"></label>
-    <label>Alerta sin avance (min)<input id="sin" inputmode="numeric" maxlength="3"></label>
   </div>
 </header>
 <nav class="tabs" role="tablist">
   <a href="#tablero" id="tab-tablero" role="tab">Tablero</a>
   <a href="#guia" id="tab-guia" role="tab">Guía instalación extensión</a>
+  <div class="ajustes">
+    <label class="chk"><input type="checkbox" id="auto" checked> Actualizar cada 5 min</label>
+    <label id="l-obj">Fin objetivo<input id="obj" inputmode="numeric" maxlength="5"></label>
+    <label>Alerta sin avance<input id="sin" inputmode="numeric" maxlength="3"> min</label>
+  </div>
 </nav>
 <main id="main">
+  <p class="sub" id="sub"></p>
   <div id="aviso"></div>
-  <div class="msg" id="vacio">Todavía no hay datos. Tocá <b>Actualizar todo</b>: la extensión lee Nextbyn y Chess con tu sesión (si no tenés esas páginas abiertas, las abre un momento en segundo plano).</div>
+  <div class="vacio" id="vacio">
+    <h2>Todavía no hay datos de hoy</h2>
+    <p>Tocá <b>Actualizar todo</b>. La extensión lee Nextbyn y Chess con tu sesión; si no tenés esas páginas abiertas, las abre un momento en segundo plano.</p>
+  </div>
   <div id="contenido"></div>
 </main>
 <section id="guia" class="guia-vista" hidden>
@@ -55,8 +61,8 @@
 <li>Botones de arriba:
 <ul>
 <li><b>Actualizar todo</b>: lee Nextbyn y Chess.</li>
-<li><b>Nextbyn</b> / <b>Chess</b>: leen solo esa fuente. Al lado figura la hora de los últimos datos; si aparece ⚠, pasá el mouse para ver qué pasó.</li>
-<li><b>Auto cada 5 min</b>: vuelve a leer todo solo mientras el reporte esté abierto.</li>
+<li><b>Nextbyn</b> / <b>Chess</b>: leen solo esa fuente. Al lado figura la hora de los últimos datos. La luz verde indica que la lectura salió bien; si está en rojo, pasá el mouse por el botón para ver qué pasó.</li>
+<li><b>Actualizar cada 5 min</b>: vuelve a leer todo solo mientras el reporte esté abierto.</li>
 </ul></li>
 <li>Si no tenés Nextbyn o Chess abiertos, la extensión los abre un momento en una pestaña de fondo y la cierra al terminar. Si la tabla de clientes de Nextbyn no se carga de fondo, muestra esa pestaña un segundo y vuelve.</li>
 <li>Tocá un camión para ver sus clientes, y un cliente para ver sus productos.</li>
