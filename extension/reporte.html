@@ -13,7 +13,7 @@
 <header class="barra">
   <div class="marca">
     <h1>Tablero de ruta</h1>
-    <p class="donde"><span id="hoy">CD Neuquén</span> <span class="ver">v1.5</span></p>
+    <p class="donde"><span id="hoy">CD Neuquén</span> <span class="ver">v1.6</span></p>
   </div>
   <div class="fuentes" aria-label="Fuentes de datos">
     <button id="b-nb" class="fuente"><span class="luz"></span>Nextbyn <span id="t-nb" class="hora">sin datos</span></button>
@@ -67,7 +67,7 @@
 </ul></li>
 <li>Si no tenés Nextbyn o Chess abiertos, la extensión los abre un momento en una pestaña de fondo y la cierra al terminar. Si la tabla de clientes de Nextbyn no se carga de fondo, muestra esa pestaña un segundo y vuelve.</li>
 <li>Tocá un camión para ver sus clientes, y un cliente para ver sus productos.</li>
-<li><b>OT (entregas a tiempo)</b>: al abrir un camión, cada cliente muestra su ventana horaria (franja celeste) y la hora en que se entregó (punto verde si fue dentro de la ventana, rojo si fue fuera). Las ventanas salen de la columna "Horario Ent." de la hoja de clientes. La hora de entrega sale de la liquidación de cada camión en Chess (la misma que se ve en "Ver liquidación", columna Hora entrega). Los clientes sin ventana o con una nota en lugar de horario (por ejemplo "AVISAR") cuentan como a tiempo al entregarse. OT = pedidos entregados dentro de la ventana sobre el total de pedidos del día.</li>
+<li><b>OT (entregas a tiempo)</b>: al abrir un camión, cada cliente muestra su ventana horaria (franja celeste) y la hora en que se entregó (punto verde si fue dentro de la ventana, rojo si fue fuera). Las ventanas salen de la columna "Horario Ent." de la hoja de clientes. La hora de entrega sale de la liquidación de cada camión en Chess (la misma que se ve en "Ver liquidación", columna Hora entrega). Los clientes sin ventana o con una nota en lugar de horario (por ejemplo "AVISAR") cuentan como a tiempo al entregarse. Se muestran dos números: <b>OT en vivo</b> (a tiempo sobre clientes ya visitados, entregados o rechazados) y <b>OT del día</b> (a tiempo sobre el total de pedidos del día). Los entregados aparecen al final de la lista, en el orden en que se entregaron.</li>
 <li><b>Histórico</b>: la pestaña Histórico muestra el OT diario de la flota, el OT por camión y los clientes que más veces quedan fuera de ventana. La primera vez hay que configurar el guardado siguiendo los pasos de esa pestaña; después el reporte guarda solo mientras está abierto.</li>
 <li><b>Prioridad pedidos pendientes</b>: pasá el mouse por el botón de cada camión (o tocalo en el celular) para ver sus pedidos pendientes en orden de prioridad. El orden sale de la pestaña <b>PL4.2 Carga ruteo</b> del Plan de agrupación de clientes: primero Ganador (P1), después Básico (P2), En crecimiento (P3) y Ventas bajas (P4); dentro de cada prioridad, primero el de mayor importe. Los clientes que no están en la hoja van al final.</li>
 </ol></div>

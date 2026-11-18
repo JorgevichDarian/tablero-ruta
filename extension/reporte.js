@@ -434,6 +434,8 @@
     var lista = listaClientes(pat);
     var r = { total: lista.length, ok: 0, fuera: 0, vencido: 0, sinhora: 0, rech: 0, pend: 0 };
     lista.forEach(function (c) { r[evaluarOT(pat, c, ahora).st]++; });
+    // OT en vivo: a tiempo sobre visitados con resultado conocido (a tiempo, fuera de ventana, rechazado).
+    r.visitados = r.ok + r.fuera + r.rech;
     return r;
   }
   function listaClientes(pat) {
@@ -468,9 +470,18 @@
     return t;
   }
   function resumenOT(o) {
-    return '<span class="ot-res">OT <b>' + pct(o.ok, o.total) + '</b> <small>' + o.ok + ' de ' + o.total + ' a tiempo' +
+    return '<span class="ot-res" title="OT en vivo: a tiempo sobre clientes ya visitados (entregados o rechazados; no cuenta los entregados sin hora)">OT en vivo <b>' + pct(o.ok, o.visitados) + '</b> <small>' + o.ok + ' de ' + o.visitados + ' visitados</small></span>' +
+      '<span class="ot-res">OT del día <b>' + pct(o.ok, o.total) + '</b> <small>' + o.ok + ' de ' + o.total + ' a tiempo' +
       (o.fuera ? ', ' + o.fuera + ' fuera de ventana' : '') + (o.vencido ? ', ' + o.vencido + ' con ventana vencida' : '') +
       (o.sinhora ? ', ' + o.sinhora + ' sin hora' : '') + '</small></span>';
+  }
+
+  // Rechazos primero, después pendientes y al final los entregados en el orden en que se entregaron.
+  function ordenarClientes(pat, lista, ahora) {
+    lista.forEach(function (c) { var h = horaEntrega(pat, c); c._t = h ? h.t : Infinity; });
+    lista.sort(function (a, b) {
+      return orden(a) - orden(b) || (orden(a) === 2 ? a._t - b._t : 0) || String(a.cliente).localeCompare(b.cliente);
+    });
   }
 
   function notaVentana(r) { return r.nota ? '<span class="ot-nota" title="Sin ventana horaria: el OT se da por cumplido">⚠ ' + esc(r.nota) + '</span>' : ''; }
@@ -494,7 +505,7 @@
       var msg = !ch ? (errCh ? 'Chess: ' + esc(errCh) : 'Tocá <b>Chess</b> arriba para sumar importes, bultos y cajones.') : 'Chess no tiene planilla con entrega hoy para ' + esc(pat) + '.';
       if (!ids.length) return '<div class="dres">' + msg + '</div>';
       var lista = listaClientes(pat);
-      lista.sort(function (a, b) { return orden(a) - orden(b) || a.cliente.localeCompare(b.cliente); });
+      ordenarClientes(pat, lista, ahora);
       return '<div class="dres"><span>' + msg + '</span><span>Clientes <b>' + lista.length + '</b></span><span>Entregados <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span>' + resumenOT(otDeCamion(pat, ahora)) + avisoOT() + '</div>' +
         '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-dom">Domicilio</th><th class="h-ot">Ventana y entrega</th></tr></thead><tbody>' +
         lista.map(function (c) { var r = evaluarOT(pat, c, ahora); return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b>' + notaVentana(r) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-ot">' + lineaCliente(r, E, ahora) + '</td></tr>'; }).join('') + '</tbody></table></div>';
@@ -502,7 +513,7 @@
 
     // Con Chess: cruza cada cliente con su estado en Nextbyn.
     var cs = cruzar(dc, nbCli);
-    cs.sort(function (a, b) { return orden(a) - orden(b) || String(a.cliente).localeCompare(b.cliente); });
+    ordenarClientes(pat, cs, ahora);
     var nRe = cs.filter(function (c) { return c.est === 'rechazado' || c.est === 'parcial'; }).length;
     var nEnt = cs.filter(function (c) { return c.est === 'entregado'; }).length;
     var h = '<div class="dres"><span>Chofer <b>' + esc(String(dc.chofer || '').replace(/^\d+\s*-\s*/, '')) + '</b></span>' +
@@ -568,11 +579,11 @@
     cams.forEach(function (e) { cuenta[e.sem]++; tot.h += e.hechos; tot.r += e.rechazos; tot.t += e.total; });
     var enRuta = cams.filter(function (e) { return e.estado === 'ABIERTA'; }).length;
     // OT de la flota: suma de los camiones con detalle de clientes.
-    var otF = { ok: 0, total: 0 }, otCam = {};
+    var otF = { ok: 0, total: 0, vis: 0 }, otCam = {};
     cams.forEach(function (e) {
       var o = otDeCamion(String(e.patente).toUpperCase(), ahora);
       otCam[e.patente] = o;
-      otF.ok += o.ok; otF.total += o.total;
+      otF.ok += o.ok; otF.total += o.total; otF.vis += o.visitados;
     });
 
     // Resumen de la flota
@@ -585,7 +596,8 @@
       '<div class="cifra"><b>' + enRuta + '</b><span>en ruta de ' + cams.length + '</span></div>' +
       '<div class="cifra"><b>' + tot.h + '<small style="font-size:18px;color:var(--tenue)"> / ' + tot.t + '</small></b><span>clientes visitados</span></div>' +
       '<div class="cifra"><b>' + (tot.t ? Math.round((tot.h / tot.t) * 100) : 0) + '%</b><span>avance general</span></div>' +
-      '<div class="cifra" title="Pedidos entregados dentro de su ventana horaria sobre el total de pedidos del día (clientes sin ventana: cumplido al entregar)"><b>' + pct(otF.ok, otF.total) + '</b><span>OT, ' + otF.ok + ' de ' + otF.total + ' a tiempo</span></div>' +
+      '<div class="cifra" title="A tiempo sobre clientes ya visitados (entregados o rechazados)"><b>' + pct(otF.ok, otF.vis) + '</b><span>OT en vivo, ' + otF.ok + ' de ' + otF.vis + ' visitados</span></div>' +
+      '<div class="cifra" title="Pedidos entregados dentro de su ventana horaria sobre el total de pedidos del día (clientes sin ventana: cumplido al entregar)"><b>' + pct(otF.ok, otF.total) + '</b><span>OT del día, sobre ' + otF.total + ' pedidos</span></div>' +
       '<div class="cifra' + (tot.r ? ' mal' : '') + '"><b>' + tot.r + '</b><span>rechazos</span></div>' +
       '</div></section>';
 
@@ -604,7 +616,7 @@
         lineaDelDia(e, E, ahora) +
         '<div class="c-cli n"><span class="big">' + e.hechos + '</span><span style="color:var(--tenue)">/' + e.total + '</span>' +
         '<div class="avance" title="' + e.entregados + ' entregados, ' + e.parciales + ' parciales, ' + e.rechazos + ' rechazos, ' + e.pendientes + ' pendientes"><i class="e" style="width:' + ancho(e.entregados) + '%"></i><i class="p" style="width:' + ancho(e.parciales) + '%"></i><i class="r" style="width:' + ancho(e.rechazos) + '%"></i></div>' +
-        (otCam[e.patente] && otCam[e.patente].total ? '<span class="mini" title="Entregados dentro de la ventana sobre el total de pedidos">OT ' + pct(otCam[e.patente].ok, otCam[e.patente].total) + '</span>' : '') + '</div>' +
+        (otCam[e.patente] && otCam[e.patente].total ? '<span class="mini" title="OT en vivo: a tiempo sobre visitados (' + otCam[e.patente].ok + ' de ' + otCam[e.patente].visitados + '). OT del día: ' + pct(otCam[e.patente].ok, otCam[e.patente].total) + ' sobre ' + otCam[e.patente].total + ' pedidos.">OT vivo ' + pct(otCam[e.patente].ok, otCam[e.patente].visitados) + '</span>' : '') + '</div>' +
         '<div class="c-ritmo n"><span class="big">' + (e.ritmo ? e.ritmo.toFixed(1) : '—') + '</span><span class="mini">cli/h</span></div>' +
         '<div class="c-fin n"><span class="big">' + (e.fin ? hhmm(e.fin) : '—') + '</span><span class="mini">' +
         (e.fin && e.fin.toDateString() !== ahora.toDateString() ? 'mañana' : e.estado === 'ABIERTA' && e.pendientes ? (e.sinAvanceMin < 1 ? 'visita hace <1 min' : 'visita hace ' + Math.round(e.sinAvanceMin) + ' min') : e.estado === 'CERRADA' ? 'cerrada' : '') +
