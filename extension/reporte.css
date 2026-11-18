@@ -272,3 +272,13 @@ th.h-ot,td.h-ot{min-width:220px}
 .ot-eta.antes{border-color:var(--azul)}
 .ot-eta.ok{border-color:var(--verde)}
 .ot-txt.riesgo b{color:#A3291F}.ot-txt.justo b{color:var(--aviso)}.ot-txt.antes b{color:var(--azul)}
+
+/* ---------- detalle de SKU y rechazos ---------- */
+.rech-res{margin:6px 0 8px;padding:7px 10px;border-radius:5px;font-size:13.5px;color:var(--tinta)}
+.rech-res b{margin-right:6px}
+.rech-res.total{background:var(--rojo-f);border-left:3px solid var(--rojo)}
+.rech-res.total b{color:#8E241C}
+.rech-res.parcial{background:#FCF2DC;border-left:3px solid var(--ambar)}
+.rech-res.parcial b{color:var(--aviso)}
+table.skus tr.sub td{padding:8px 14px 3px 0;font-weight:700;color:var(--tinta);font-size:12.5px}
+table.skus tr.sku-rech td{color:#A3291F}

@@ -546,6 +546,30 @@
     });
   }
 
+  // Productos del cliente: si hubo rechazo, primero un resumen (total o parcial) y los SKU rechazados.
+  function detalleProductos(c) {
+    var items = c.items || [], rech = items.filter(function (it) { return it.rechazado; }), ent = items.filter(function (it) { return !it.rechazado; });
+    var suma = function (l, k) { return l.reduce(function (a, it) { return a + (+it[k] || 0); }, 0); };
+    var fila = function (it) {
+      return '<tr' + (it.rechazado ? ' class="sku-rech"' : '') + '><td>' + esc(it.articulo) + (it.ret ? ' <span class="pill p-pe">RET</span>' : '') +
+        '</td><td class="n">' + num(it.bultos) + ' bultos</td><td class="n">' + plata(it.importe) + '</td></tr>';
+    };
+    var h = '';
+    if (rech.length) {
+      var total = !ent.length;
+      var bR = suma(rech, 'bultos'), bT = suma(items, 'bultos');
+      h += '<div class="rech-res ' + (total ? 'total' : 'parcial') + '"><b>' + (total ? 'Rechazo total' : 'Rechazo parcial') + '</b> ' +
+        rech.length + ' de ' + items.length + ' SKU, ' + num(bR) + ' de ' + num(bT) + ' bultos (' + (bT ? Math.round((bR / bT) * 100) : 0) + '%), ' +
+        plata(suma(rech, 'importe')) + ' de ' + plata(suma(items, 'importe')) +
+        (c.motivos && c.motivos.length ? '. Motivo: ' + esc(c.motivos.join(', ')) : '') + '</div>';
+      h += '<table class="skus"><tbody><tr class="sub"><td colspan="3">SKU rechazados (' + rech.length + ')</td></tr>' + rech.map(fila).join('');
+      if (ent.length) h += '<tr class="sub"><td colspan="3">SKU entregados (' + ent.length + ')</td></tr>' + ent.map(fila).join('');
+      return h + '</tbody></table>';
+    }
+    var aviso = c.est === 'rechazado' || c.est === 'parcial' ? '<div class="rech-res parcial"><b>' + (c.est === 'rechazado' ? 'Rechazo total' : 'Rechazo parcial') + ' según Nextbyn</b> Chess todavía no tiene cargado qué SKU se rechazaron.</div>' : '';
+    return aviso + '<table class="skus"><tbody>' + items.map(fila).join('') + '</tbody></table>';
+  }
+
   function notaVentana(r) { return r.nota ? '<span class="ot-nota" title="Sin ventana horaria: el OT se da por cumplido">⚠ ' + esc(r.nota) + '</span>' : ''; }
   function avisoOT() {
     if (!vt) return '<span class="ot-aviso">' + (errVt ? 'No se pudo leer la hoja de ventanas: ' + esc(errVt) : 'Leyendo ventanas horarias…') + '</span>';
@@ -592,9 +616,7 @@
         '</td><td><span class="car' + (abierto ? ' rot' : '') + '">▸</span><b>' + esc(c.cliente) + '</b>' + notaVentana(rOT) + '</td><td class="h-ot">' + lineaCliente(rOT, E, ahora) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-loc">' + esc(c.localidad) +
         '</td><td class="h-comp" style="font-size:13px">' + esc(c.comprobantes.join(', ')) + '</td><td class="n">' + plata(c.importe) + '</td><td class="n">' + num(c.bultos) + '</td><td class="n">' + num(c.cajones) + '</td></tr>';
       if (abierto) {
-        h += '<tr class="prod"><td colspan="9"><table>' + c.items.map(function (it) {
-          return '<tr><td>' + (it.rechazado ? 'Rechazado: ' : '') + esc(it.articulo) + (it.ret ? ' <span class="pill p-pe">RET</span>' : '') + '</td><td class="n">' + num(it.bultos) + ' bultos</td><td class="n">' + plata(it.importe) + '</td></tr>';
-        }).join('') + '</table></td></tr>';
+        h += '<tr class="prod"><td colspan="9">' + detalleProductos(c) + '</td></tr>';
       }
     });
     return h + '</tbody></table></div>';
