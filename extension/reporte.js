@@ -257,29 +257,40 @@
     return filas;
   }
   // Devuelve { codigo: { p, cluster, ventana, espera } } o lanza un error si no encuentra las columnas.
+  // Ojo: Google, al exportar, deja vacío el título de las columnas numéricas (Cod. Cliente y las
+  // prioridades), así que esas columnas se ubican por su posición junto a las que sí tienen título.
   function armarPrioridades(csv) {
     var filas = leerCSV(csv), h = -1;
-    for (var i = 0; i < Math.min(filas.length, 30); i++) {
-      var t = filas[i].join('|').toLowerCase();
-      if (/cod\.?\s*cliente/.test(t) && /cl[uú]ster/.test(t)) { h = i; break; }
+    var norm = function (x) { return String(x || '').normalize('NFC').replace(/\s+/g, ' ').trim().toLowerCase(); };
+    for (var i = 0; i < Math.min(filas.length, 40); i++) {
+      var t = filas[i].map(norm).join('|');
+      if (/(^|\|)nombre(\||$)/.test(t) && /cl[uú]ster vigente/.test(t)) { h = i; break; }
     }
-    if (h < 0) throw new Error('La pestaña PL4.2 Carga ruteo no tiene la columna «Cod. Cliente».');
-    var cab = filas[h].map(function (x) { return x.toLowerCase(); });
+    if (h < 0) throw new Error('No encontré las columnas «Nombre» y «Clúster vigente» en la pestaña PL4.2 Carga ruteo.');
+    var cab = filas[h].map(norm);
     function col(re) { for (var k = 0; k < cab.length; k++) if (re.test(cab[k])) return k; return -1; }
-    var cCod = col(/cod\.?\s*cliente/), cPrio = col(/prioridad.*ruteo/), cClu = col(/cl[uú]ster vigente/), cVen = col(/ventana/), cEsp = col(/espera/);
-    if (cClu < 0) cClu = col(/cl[uú]ster/);
+    var cNom = col(/^nombre$/), cClu = col(/cl[uú]ster vigente/), cC1 = col(/cl[uú]ster corrida 1/);
+    var cCod = col(/cod\.?\s*cliente/);
+    if (cCod < 0) cCod = cNom - 1;
+    var cPrio = col(/prioridad.*ruteo/);
+    if (cPrio < 0 && cC1 >= 0) cPrio = cC1 + 2; // Prioridad stock, Prioridad en el ruteo
+    var cVen = col(/ventana/), cEsp = col(/espera/);
+    if (cEsp < 0) { var cRe = col(/reintento/); if (cRe >= 0) cEsp = cRe + 1; }
     var porCluster = { ganador: 1, 'básico': 2, basico: 2, 'en crecimiento': 3, 'ventas bajas': 4 };
     var mapa = {}, n = 0;
     for (var j = h + 1; j < filas.length; j++) {
-      var f = filas[j], cod = String(f[cCod] || '').trim();
+      var f = filas[j], cod = String(f[cCod] || '').trim().replace(/\.0+$/, '');
       if (!/^\d+$/.test(cod)) continue;
       var clu = String(f[cClu] || '').trim();
+      var desdeCluster = porCluster[norm(clu)] || 0;
       var p = cPrio >= 0 ? parseInt(f[cPrio], 10) : NaN;
-      if (!(p >= 1 && p <= 9)) p = porCluster[clu.toLowerCase()] || 0;
-      mapa[cod] = { p: p, cluster: clu, ventana: cVen >= 0 ? String(f[cVen] || '').trim() : '', espera: cEsp >= 0 ? String(f[cEsp] || '').trim() : '' };
+      // Si la columna de prioridad no es la esperada, manda el clúster (la prioridad sale de él).
+      if (!(p >= 1 && p <= 4) || (desdeCluster && p !== desdeCluster)) p = desdeCluster;
+      var esp = cEsp >= 0 ? String(f[cEsp] || '').trim().replace(/\.0+$/, '') : '';
+      mapa[cod] = { p: p, cluster: clu, ventana: cVen >= 0 ? String(f[cVen] || '').trim() : '', espera: /^\d+$/.test(esp) ? esp : '' };
       n++;
     }
-    if (!n) throw new Error('La pestaña PL4.2 Carga ruteo no tiene clientes.');
+    if (!n) throw new Error('La pestaña PL4.2 Carga ruteo no tiene clientes con código.');
     return mapa;
   }
 
@@ -319,7 +330,7 @@
       var plan = c.plan;
       var nombre = String(c.cliente).replace(/^\s*\d+\s*-\s*/, '');
       return '<li class="p' + c.prio + '"><span class="pp-cli"><b>' + esc(nombre) + '</b><small>' + esc(c.codigo || '') + (c.domicilio ? ', ' + esc(c.domicilio) : '') + '</small></span>' +
-        '<span class="pp-plan">' + (plan ? '<span class="pp-tag">P' + plan.p + ' ' + esc(plan.cluster || NOMBRE_PRIO[plan.p] || '') + '</span><small>' + esc([plan.ventana, plan.espera ? 'espera máx. ' + plan.espera + ' min' : ''].filter(Boolean).join(', ')) + '</small>' : '<span class="pp-tag sin">Sin prioridad en la hoja</span>') + '</span>' +
+        '<span class="pp-plan">' + (plan && plan.p ? '<span class="pp-tag">P' + plan.p + ' ' + esc(plan.cluster || NOMBRE_PRIO[plan.p] || '') + '</span><small>' + esc([plan.ventana, plan.espera ? 'espera máx. ' + plan.espera + ' min' : ''].filter(Boolean).join(', ')) + '</small>' : '<span class="pp-tag sin">' + (plan ? 'Sin prioridad (' + esc(plan.cluster || 'sin clúster') + ')' : 'Sin prioridad en la hoja') + '</span>') + '</span>' +
         (c.importe != null ? '<span class="pp-imp">' + plata(c.importe) + '</span>' : '') + '</li>';
     }).join('') + '</ol>';
     if (pr) h += '<p class="pp-pie">Hoja PL4.2 Carga ruteo leída a las ' + hhmm(pr.at) + '.</p>';
