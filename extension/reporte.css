@@ -214,3 +214,20 @@ button.prio span{font:700 13px/1 var(--cond);background:var(--tinta);color:#fff;
 .pp-tag.sin{color:var(--tenue);border-style:dashed;border-color:var(--linea);background:none}
 .pp-pie{margin:0;padding:8px 14px 10px;border-top:1px solid var(--linea2);color:var(--tenue);font-size:12px}
 @media (max-width:900px){button.prio{margin-left:0}}
+
+/* ---------- OT por cliente ---------- */
+.ot-linea{position:relative;height:18px;min-width:200px}
+.ot-linea .carril{position:absolute;left:0;right:0;top:8px;height:2px;background:var(--linea2)}
+.ot-linea .ot-ven{position:absolute;top:3px;height:12px;border-radius:3px;background:rgba(47,114,208,.18);border:1px solid rgba(47,114,208,.45)}
+.ot-linea .ot-pto{position:absolute;top:2px;width:14px;height:14px;margin-left:-7px;border-radius:50%;border:2px solid #fff;box-shadow:0 0 0 1px rgba(19,32,48,.25)}
+.ot-pto.ok{background:var(--verde)}.ot-pto.fuera{background:var(--rojo)}
+.ot-linea .ahora{position:absolute;top:0;bottom:0;border-left:2px solid rgba(47,114,208,.55)}
+.ot-txt{display:block;font-size:12.5px;color:var(--tenue);margin-top:3px;white-space:nowrap}
+.ot-txt b{font-weight:700;margin-right:3px}
+.ot-txt.ok b{color:#11603F}.ot-txt.fuera b,.ot-txt.vencido b{color:#A3291F}.ot-txt.pend b,.ot-txt.sinhora b,.ot-txt.rech b{color:var(--tinta2)}
+.ot-nota{display:inline-block;margin-top:4px;padding:1px 7px;border-radius:3px;background:var(--gris-f);color:var(--tinta2);font-size:12px;font-weight:600}
+.ot-res b{color:var(--tinta)}
+.ot-res small{font-size:13px;color:var(--tenue)}
+.ot-aviso{color:var(--tenue);font-size:13px}
+th.h-ot,td.h-ot{min-width:220px}
+@media (max-width:900px){table.cli .h-ot{min-width:170px}}

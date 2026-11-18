@@ -16,6 +16,12 @@ Una página web no puede leer Nextbyn ni Chess por su cuenta: Chrome no deja que
 
 Cada camión en ruta tiene el botón **Prioridad pedidos pendientes**. Al pasar el mouse muestra sus pendientes ordenados por la **Prioridad en el ruteo** de la pestaña `PL4.2 Carga ruteo` de la hoja *4.2 Plan de agrupación de clientes* (1 Ganador, 2 Básico, 3 En crecimiento, 4 Ventas bajas) y, dentro de cada prioridad, por importe. La extensión lee la hoja con la sesión de Google del usuario (cada 1 hora como máximo); el cruce es por código de cliente.
 
+## OT (entregas dentro de la ventana horaria)
+
+OT = pedidos entregados dentro de su ventana horaria ÷ total de pedidos del día. La ventana de cada cliente sale de la columna `Horario Ent.` (BO) de la hoja *Tablero-de-ruta_Clientes-actualizado*, con formato `hh:mm a hh:mm; hh:mm a hh:mm`. Los clientes sin ventana o con una nota en lugar de horario ("AVISAR", "LLAMAR ANTES") cuentan como a tiempo al entregarse; la nota se muestra en gris debajo del cliente.
+
+La hora de entrega se toma de Nextbyn si la grilla de Clientes la trae (columna de fecha/hora de visita). Si no, el reporte registra la hora en que vio al cliente pasar de pendiente a entregado; los clientes que ya figuraban entregados al abrir el reporte quedan "sin hora".
+
 ## Horarios de referencia
 
 | | Apertura de ruta | Fin de jornada |

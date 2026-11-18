@@ -68,8 +68,26 @@ async function leerNextbyn(opciones) {
 
   // Pestaña "Clientes" (grilla ag-Grid). Primero intenta leer los datos de la grilla
   // (funciona aunque la pestaña no esté a la vista); si no, lee las filas dibujadas.
+  // Hora de entrega/visita: Nextbyn la puede traer como "17/11/2026 10:35", "2026-11-17T10:35:00",
+  // "10:35" o "/Date(1731850000000)/". Devuelve milisegundos o null.
+  function aHora(v) {
+    const s = String(v == null ? '' : v).trim();
+    if (!s || s === '0') return null;
+    let m = /\/Date\((\d{10,13})/.exec(s);
+    if (m) return +m[1];
+    m = /(\d{2})\/(\d{2})\/(\d{4})[ T]+(\d{1,2}):(\d{2})/.exec(s);
+    if (m) return new Date(+m[3], +m[2] - 1, +m[1], +m[4], +m[5]).getTime();
+    m = /(\d{4})-(\d{2})-(\d{2})[ T](\d{1,2}):(\d{2})/.exec(s);
+    if (m) return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]).getTime();
+    m = /^(\d{1,2}):(\d{2})(:\d{2})?$/.exec(s);
+    if (m) { const d = new Date(); d.setHours(+m[1], +m[2], 0, 0); return d.getTime(); }
+    return null;
+  }
+  // Columnas que pueden traer la hora real de la visita (en orden de preferencia).
+  const COLS_HORA = [/(hora|fecha|fh|time).*(entreg|visit|llegad|cumpl|cierre|real)/i, /(entreg|visit|llegad|cumpl).*(hora|fecha|fh|time)/i, /^(hora|fecha)(visita|entrega)?$/i];
+
   function clientes(doc) {
-    const out = { n: 0, p: {} };
+    const out = { n: 0, p: {}, campos: null, colHora: '' };
     const txt = (e) => String((e && e.textContent) || '').replace(/\s+/g, ' ').trim();
     function agregar(o) {
       if (!('estadoentrega' in o) && !('nomcli' in o)) return;
@@ -93,7 +111,16 @@ async function leerNextbyn(opciones) {
       id = id || 'N:' + nombre;
       const P = (out.p[pat] = out.p[pat] || {});
       if (!P[id]) out.n++;
-      P[id] = { nombre: nombre, domicilio: o.domicli || '', estado: String(o.estadoentrega || '').toUpperCase() };
+      let hora = null;
+      for (const re of COLS_HORA) {
+        for (const c of Object.keys(o)) {
+          if (hora == null && re.test(c) && !/estado/i.test(c)) { const h = aHora(o[c]); if (h) { hora = h; if (!out.colHora) out.colHora = c; } }
+        }
+        if (hora != null) break;
+      }
+      // Muestra de columnas (sin teléfonos) para poder diagnosticar desde el reporte.
+      if (!out.campos) out.campos = Object.keys(o).map((c) => c + '=' + String(o[c]).replace(/\d{6,}/g, '#').slice(0, 30)).join(' | ');
+      P[id] = { nombre: nombre, domicilio: o.domicli || '', estado: String(o.estadoentrega || '').toUpperCase(), hora: hora };
     }
     // 1) Datos de la grilla (ag-Grid API guardada en alguna variable global de la página)
     try {

@@ -40,6 +40,9 @@
   var errNb = '', errCh = '', errPr = '', sinExtension = false;
   var CLAVE_PRIO = 'ltReportePrio';
   var pr = leerLS(CLAVE_PRIO, null); // { mapa, at }
+  var CLAVE_VENT = 'ltReporteVent', CLAVE_OBS = 'ltReporteObs';
+  var vt = leerLS(CLAVE_VENT, null); // { mapa: { codigo: { f: [[desde, hasta] en minutos], nota } }, at }
+  var errVt = '', leyendoVt = false;
   var abiertos = {}, clientesAbiertos = {};
   var ocupado = { nextbyn: false, chess: false };
   var proxima = 0, timer = null;
@@ -67,7 +70,7 @@
     pintarBotones();
     return pedir(tipo).then(function (data) {
       sinExtension = false;
-      if (tipo === 'nextbyn') { nb = data; errNb = ''; } else { ch = data; errCh = ''; }
+      if (tipo === 'nextbyn') { nb = data; errNb = ''; registrarObservaciones(); } else { ch = data; errCh = ''; }
       guardarLS(CLAVE_DATOS, { nb: nb, ch: ch });
     }, function (e) {
       var m = String(e.message || e);
@@ -80,7 +83,21 @@
     programar();
     // La hoja de prioridades cambia poco: se vuelve a leer si tiene más de 1 hora.
     if (!pr || Date.now() - pr.at > 36e5) actualizarPrioridades();
+    if (!vt || Date.now() - vt.at > 36e5) actualizarVentanas();
     return Promise.all([actualizar('nextbyn'), actualizar('chess')]);
+  }
+
+  function actualizarVentanas() {
+    if (leyendoVt) return;
+    leyendoVt = true;
+    pedir('ventanas').then(function (data) {
+      vt = { mapa: armarVentanas(data.csv), at: data.at };
+      errVt = '';
+      guardarLS(CLAVE_VENT, vt);
+    }).catch(function (e) {
+      var m = String(e.message || e);
+      errVt = m === 'NOEXT' ? 'falta la extensión' : m;
+    }).then(function () { leyendoVt = false; pintar(); });
   }
 
   var leyendoPr = false;
@@ -229,6 +246,7 @@
       var x = (c.codigo && nbCli[c.codigo]) || porNombre[nz(String(c.cliente).replace(/^\s*\d+\s*-\s*/, ''))];
       c.leidoNextbyn = !!x;
       c.nbEstado = x ? x.estado : '';
+      c.horaNb = x && x.hora ? x.hora : null;
       c.est = c.rechazado ? 'rechazado' : c.parcial ? 'parcial' : c.entregado ? 'entregado' : '';
       var s = x && estadoNextbyn(x.estado);
       if (s === 'rechazado' || s === 'parcial') c.est = s;
@@ -337,7 +355,125 @@
     return h;
   }
 
-  function detalle(cam) {
+  // ---------- OT: entregas dentro de la ventana horaria ----------
+  // Hoja de ventanas (select D, F, BO): código de cliente, razón social, "hh:mm a hh:mm; hh:mm a hh:mm".
+  function armarVentanas(csv) {
+    var filas = leerCSV(csv), mapa = {}, n = 0;
+    filas.forEach(function (f) {
+      var cod = String(f[0] || '').trim().replace(/\.0+$/, '');
+      if (!/^\d+$/.test(cod)) return;
+      var txt = String(f[2] || '').trim(), fr = [], re = /(\d{2}):(\d{2}) a (\d{2}):(\d{2})/g, m;
+      while ((m = re.exec(txt))) fr.push([+m[1] * 60 + +m[2], +m[3] * 60 + +m[4]]);
+      var limpio = /^\d{2}:\d{2} a \d{2}:\d{2}(; \d{2}:\d{2} a \d{2}:\d{2})*$/.test(txt);
+      mapa[cod] = { f: limpio ? fr : [], nota: !limpio && txt ? txt : '' };
+      n++;
+    });
+    if (!n) throw new Error('La hoja de ventanas horarias no tiene clientes con código.');
+    return mapa;
+  }
+  function minDelDia(t) { var d = new Date(t); return d.getHours() * 60 + d.getMinutes(); }
+  function hm(min) { return ('0' + Math.floor(min / 60)).slice(-2) + ':' + ('0' + (min % 60)).slice(-2); }
+  function textoVentana(f) { return f.map(function (x) { return hm(x[0]) + ' a ' + hm(x[1]); }).join('; '); }
+
+  // Si Nextbyn no informa la hora de entrega, se toma la hora en que este reporte vio el cambio
+  // de pendiente a entregado (precisión: el intervalo de actualización). Si el cliente ya figuraba
+  // entregado la primera vez que el reporte lo vio, la hora queda desconocida.
+  function registrarObservaciones() {
+    if (!nb) return;
+    var hoyS = new Date().toDateString(), obs = leerLS(CLAVE_OBS, {});
+    if (obs.dia !== hoyS) obs = { dia: hoyS, c: {} };
+    var t = nb.at || Date.now();
+    Object.keys((nb.cli && nb.cli.p) || {}).forEach(function (pat) {
+      var P = nb.cli.p[pat];
+      Object.keys(P).forEach(function (id) {
+        var k = pat + '|' + id, o = obs.c[k] || {}, est = estadoNextbyn(P[id].estado);
+        if (!est) o.pend = t;
+        else if (!o.ent && o.pend) o.ent = t;
+        else if (!o.ent && !o.pend) o.antes = 1;
+        obs.c[k] = o;
+      });
+    });
+    guardarLS(CLAVE_OBS, obs);
+  }
+  function horaEntrega(pat, c) {
+    if (c.horaNb) return { t: c.horaNb, fuente: 'nextbyn' };
+    var obs = leerLS(CLAVE_OBS, {});
+    var o = obs.dia === new Date().toDateString() && obs.c && obs.c[pat + '|' + (c.codigo || '')];
+    if (o && o.ent) return { t: o.ent, fuente: 'reporte' };
+    return null;
+  }
+
+  // Evalúa un cliente. st: ok (a tiempo), fuera, sinhora, vencido, pend, rech.
+  function evaluarOT(pat, c, ahora) {
+    var v = vt && vt.mapa && c.codigo ? vt.mapa[c.codigo] : null;
+    var f = v ? v.f : [], r = { f: f, nota: v ? v.nota : '', sinVentana: !f.length };
+    var entregado = c.est === 'entregado' || c.est === 'parcial';
+    if (c.est === 'rechazado') { r.st = 'rech'; return r; }
+    if (entregado) {
+      if (r.sinVentana) { r.st = 'ok'; r.h = horaEntrega(pat, c); return r; }
+      r.h = horaEntrega(pat, c);
+      if (!r.h) { r.st = 'sinhora'; return r; }
+      var m = minDelDia(r.h.t);
+      r.st = f.some(function (x) { return m >= x[0] && m <= x[1]; }) ? 'ok' : 'fuera';
+      r.temprano = r.st === 'fuera' && m < f[0][0];
+      return r;
+    }
+    var am = minDelDia(ahora);
+    r.st = !r.sinVentana && am > f[f.length - 1][1] ? 'vencido' : 'pend';
+    return r;
+  }
+  // OT del camión: entregados dentro de la ventana sobre el total de pedidos del día.
+  function otDeCamion(pat, ahora) {
+    var lista = listaClientes(pat);
+    var r = { total: lista.length, ok: 0, fuera: 0, vencido: 0, sinhora: 0, rech: 0, pend: 0 };
+    lista.forEach(function (c) { r[evaluarOT(pat, c, ahora).st]++; });
+    return r;
+  }
+  function listaClientes(pat) {
+    var nbCli = (nb && nb.cli && nb.cli.p && nb.cli.p[pat]) || {};
+    var dc = ch && ch.data && ch.data[pat];
+    if (dc) return cruzar(dc, nbCli);
+    return Object.keys(nbCli).map(function (id) {
+      var x = nbCli[id];
+      return { codigo: id.indexOf('N:') ? id : '', cliente: (id.indexOf('N:') ? id + ' - ' : '') + x.nombre, domicilio: x.domicilio, nbEstado: x.estado, horaNb: x.hora || null, leidoNextbyn: true, est: estadoNextbyn(x.estado) };
+    });
+  }
+  function pct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '—'; }
+
+  // Mini línea del día de un cliente: ventana(s) sombreada(s) y la hora de entrega.
+  var TXT_OT = { ok: 'A tiempo', fuera: 'Fuera de ventana', sinhora: 'Sin hora de entrega', vencido: 'Ventana vencida', pend: 'Pendiente', rech: 'Rechazado' };
+  function lineaCliente(r, E, ahora) {
+    var h = '<div class="ot-linea" title="' + esc(tituloOT(r)) + '"><div class="carril"></div>';
+    r.f.forEach(function (x) {
+      var a = aHora(ahora, hm(x[0])), b = aHora(ahora, hm(x[1]));
+      h += '<div class="ot-ven" style="left:' + E.x(a) + '%;width:' + Math.max(0.8, E.x(b) - E.x(a)) + '%"></div>';
+    });
+    if (r.h) h += '<div class="ot-pto ' + r.st + '" style="left:' + E.x(r.h.t) + '%"></div>';
+    h += '<div class="ahora" style="left:' + E.x(ahora) + '%"></div></div>';
+    var sub = r.f.length ? textoVentana(r.f) : 'Sin ventana';
+    if (r.h) sub += (r.h.fuente === 'reporte' ? ', visto entregado ' : ', entregó ') + hhmm(r.h.t);
+    return h + '<span class="ot-txt ' + r.st + '"><b>' + TXT_OT[r.st] + (r.temprano ? ' (antes)' : '') + '</b> ' + esc(sub) + '</span>';
+  }
+  function tituloOT(r) {
+    var t = TXT_OT[r.st] + '. Ventana: ' + (r.f.length ? textoVentana(r.f) : 'sin ventana (el OT se da por cumplido)');
+    if (r.h) t += '. Entrega: ' + hhmm(r.h.t) + (r.h.fuente === 'reporte' ? ' (hora en que el reporte vio el cambio; Nextbyn no informa la hora)' : ' (Nextbyn)');
+    if (r.st === 'sinhora') t += '. El cliente ya figuraba entregado cuando se abrió el reporte y Nextbyn no informa la hora.';
+    return t;
+  }
+  function resumenOT(o) {
+    return '<span class="ot-res">OT <b>' + pct(o.ok, o.total) + '</b> <small>' + o.ok + ' de ' + o.total + ' a tiempo' +
+      (o.fuera ? ', ' + o.fuera + ' fuera de ventana' : '') + (o.vencido ? ', ' + o.vencido + ' con ventana vencida' : '') +
+      (o.sinhora ? ', ' + o.sinhora + ' sin hora' : '') + '</small></span>';
+  }
+
+  function notaVentana(r) { return r.nota ? '<span class="ot-nota" title="Sin ventana horaria: el OT se da por cumplido">⚠ ' + esc(r.nota) + '</span>' : ''; }
+  function avisoOT() {
+    if (!vt) return '<span class="ot-aviso">' + (errVt ? 'No se pudo leer la hoja de ventanas: ' + esc(errVt) : 'Leyendo ventanas horarias…') + '</span>';
+    if (nb && nb.cli && nb.cli.n && !nb.cli.colHora) return '<span class="ot-aviso" title="' + esc('Columnas de Nextbyn: ' + (nb.cli.campos || 'sin datos')) + '">Nextbyn no informa la hora de entrega: se usa la hora en que el reporte vio cada cambio.</span>';
+    return '';
+  }
+
+  function detalle(cam, E, ahora) {
     var pat = String(cam.patente).toUpperCase();
     var nbCli = (nb && nb.cli && nb.cli.p && nb.cli.p[pat]) || {};
     var hayNb = !!(nb && nb.cli && nb.cli.n);
@@ -348,11 +484,11 @@
       var ids = Object.keys(nbCli);
       var msg = !ch ? (errCh ? 'Chess: ' + esc(errCh) : 'Tocá <b>Chess</b> arriba para sumar importes, bultos y cajones.') : 'Chess no tiene planilla con entrega hoy para ' + esc(pat) + '.';
       if (!ids.length) return '<div class="dres">' + msg + '</div>';
-      var lista = ids.map(function (id) { var x = nbCli[id]; return { cliente: (id.indexOf('N:') ? id + ' - ' : '') + x.nombre, domicilio: x.domicilio, nbEstado: x.estado, leidoNextbyn: true, est: estadoNextbyn(x.estado) }; });
+      var lista = listaClientes(pat);
       lista.sort(function (a, b) { return orden(a) - orden(b) || a.cliente.localeCompare(b.cliente); });
-      return '<div class="dres"><span>' + msg + '</span><span>Clientes <b>' + lista.length + '</b></span><span>Entregados <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span></div>' +
-        '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th>Domicilio</th></tr></thead><tbody>' +
-        lista.map(function (c) { return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b></td><td>' + esc(c.domicilio) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      return '<div class="dres"><span>' + msg + '</span><span>Clientes <b>' + lista.length + '</b></span><span>Entregados <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span>' + resumenOT(otDeCamion(pat, ahora)) + avisoOT() + '</div>' +
+        '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-dom">Domicilio</th><th class="h-ot">Ventana y entrega</th></tr></thead><tbody>' +
+        lista.map(function (c) { var r = evaluarOT(pat, c, ahora); return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b>' + notaVentana(r) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-ot">' + lineaCliente(r, E, ahora) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
 
     // Con Chess: cruza cada cliente con su estado en Nextbyn.
@@ -365,16 +501,16 @@
       '<span>Clientes <b>' + cs.length + '</b></span><span>Entregados <b>' + nEnt + '</b></span>' + (nRe ? '<span>Rechazos <b>' + nRe + '</b></span>' : '') +
       '<span>Importe <b>' + plata(dc.importe) + '</b></span><span>Bultos <b>' + Math.round(dc.bultos) + '</b></span>' +
       '<span>Cajones retornables <b>' + Math.round(dc.cajones) + '</b></span>' +
-      (hayNb ? '' : '<span>Sin estados de Nextbyn: el estado sale de Chess.</span>') + '</div>' +
-      '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-dom">Domicilio</th><th class="h-loc">Localidad</th><th class="h-comp">Comprobante</th><th class="n">Importe</th><th class="n">Bultos</th><th class="n">Cajones</th></tr></thead><tbody>';
+      (hayNb ? '' : '<span>Sin estados de Nextbyn: el estado sale de Chess.</span>') + resumenOT(otDeCamion(pat, ahora)) + avisoOT() + '</div>' +
+      '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-ot">Ventana y entrega</th><th class="h-dom">Domicilio</th><th class="h-loc">Localidad</th><th class="h-comp">Comprobante</th><th class="n">Importe</th><th class="n">Bultos</th><th class="n">Cajones</th></tr></thead><tbody>';
     cs.forEach(function (c) {
-      var k = pat + '|' + c.cliente, abierto = !!clientesAbiertos[k];
+      var k = pat + '|' + c.cliente, abierto = !!clientesAbiertos[k], rOT = evaluarOT(pat, c, ahora);
       h += '<tr class="cl" data-cl="' + esc(k) + '"><td>' + pillEstado(c) +
         (c.motivos && c.motivos.length ? '<span class="motivo">' + esc(c.motivos.join(', ')) + '</span>' : '') +
-        '</td><td><span class="car' + (abierto ? ' rot' : '') + '">▸</span><b>' + esc(c.cliente) + '</b></td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-loc">' + esc(c.localidad) +
+        '</td><td><span class="car' + (abierto ? ' rot' : '') + '">▸</span><b>' + esc(c.cliente) + '</b>' + notaVentana(rOT) + '</td><td class="h-ot">' + lineaCliente(rOT, E, ahora) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-loc">' + esc(c.localidad) +
         '</td><td class="h-comp" style="font-size:13px">' + esc(c.comprobantes.join(', ')) + '</td><td class="n">' + plata(c.importe) + '</td><td class="n">' + num(c.bultos) + '</td><td class="n">' + num(c.cajones) + '</td></tr>';
       if (abierto) {
-        h += '<tr class="prod"><td colspan="8"><table>' + c.items.map(function (it) {
+        h += '<tr class="prod"><td colspan="9"><table>' + c.items.map(function (it) {
           return '<tr><td>' + (it.rechazado ? 'Rechazado: ' : '') + esc(it.articulo) + (it.ret ? ' <span class="pill p-pe">RET</span>' : '') + '</td><td class="n">' + num(it.bultos) + ' bultos</td><td class="n">' + plata(it.importe) + '</td></tr>';
         }).join('') + '</table></td></tr>';
       }
@@ -422,6 +558,13 @@
     var cuenta = { rojo: 0, amarillo: 0, azul: 0, verde: 0, gris: 0 }, tot = { h: 0, r: 0, t: 0 };
     cams.forEach(function (e) { cuenta[e.sem]++; tot.h += e.hechos; tot.r += e.rechazos; tot.t += e.total; });
     var enRuta = cams.filter(function (e) { return e.estado === 'ABIERTA'; }).length;
+    // OT de la flota: suma de los camiones con detalle de clientes.
+    var otF = { ok: 0, total: 0 }, otCam = {};
+    cams.forEach(function (e) {
+      var o = otDeCamion(String(e.patente).toUpperCase(), ahora);
+      otCam[e.patente] = o;
+      otF.ok += o.ok; otF.total += o.total;
+    });
 
     // Resumen de la flota
     var nombres = { rojo: 'Demorados', amarillo: 'Ajustados', azul: 'Recién salen', verde: 'En horario', gris: 'Finalizados' };
@@ -433,6 +576,7 @@
       '<div class="cifra"><b>' + enRuta + '</b><span>en ruta de ' + cams.length + '</span></div>' +
       '<div class="cifra"><b>' + tot.h + '<small style="font-size:18px;color:var(--tenue)"> / ' + tot.t + '</small></b><span>clientes visitados</span></div>' +
       '<div class="cifra"><b>' + (tot.t ? Math.round((tot.h / tot.t) * 100) : 0) + '%</b><span>avance general</span></div>' +
+      '<div class="cifra" title="Pedidos entregados dentro de su ventana horaria sobre el total de pedidos del día (clientes sin ventana: cumplido al entregar)"><b>' + pct(otF.ok, otF.total) + '</b><span>OT, ' + otF.ok + ' de ' + otF.total + ' a tiempo</span></div>' +
       '<div class="cifra' + (tot.r ? ' mal' : '') + '"><b>' + tot.r + '</b><span>rechazos</span></div>' +
       '</div></section>';
 
@@ -450,12 +594,13 @@
         (e.estado === 'ABIERTA' && e.pendientes ? '<button type="button" class="prio" data-prio="' + esc(e.patente) + '" aria-haspopup="dialog">Prioridad pedidos pendientes <span>' + cantidadPendientes(e) + '</span></button>' : '') + '</div>' +
         lineaDelDia(e, E, ahora) +
         '<div class="c-cli n"><span class="big">' + e.hechos + '</span><span style="color:var(--tenue)">/' + e.total + '</span>' +
-        '<div class="avance" title="' + e.entregados + ' entregados, ' + e.parciales + ' parciales, ' + e.rechazos + ' rechazos, ' + e.pendientes + ' pendientes"><i class="e" style="width:' + ancho(e.entregados) + '%"></i><i class="p" style="width:' + ancho(e.parciales) + '%"></i><i class="r" style="width:' + ancho(e.rechazos) + '%"></i></div></div>' +
+        '<div class="avance" title="' + e.entregados + ' entregados, ' + e.parciales + ' parciales, ' + e.rechazos + ' rechazos, ' + e.pendientes + ' pendientes"><i class="e" style="width:' + ancho(e.entregados) + '%"></i><i class="p" style="width:' + ancho(e.parciales) + '%"></i><i class="r" style="width:' + ancho(e.rechazos) + '%"></i></div>' +
+        (otCam[e.patente] && otCam[e.patente].total ? '<span class="mini" title="Entregados dentro de la ventana sobre el total de pedidos">OT ' + pct(otCam[e.patente].ok, otCam[e.patente].total) + '</span>' : '') + '</div>' +
         '<div class="c-ritmo n"><span class="big">' + (e.ritmo ? e.ritmo.toFixed(1) : '—') + '</span><span class="mini">cli/h</span></div>' +
         '<div class="c-fin n"><span class="big">' + (e.fin ? hhmm(e.fin) : '—') + '</span><span class="mini">' +
         (e.fin && e.fin.toDateString() !== ahora.toDateString() ? 'mañana' : e.estado === 'ABIERTA' && e.pendientes ? (e.sinAvanceMin < 1 ? 'visita hace <1 min' : 'visita hace ' + Math.round(e.sinAvanceMin) + ' min') : e.estado === 'CERRADA' ? 'cerrada' : '') +
         '</span></div></div>';
-      if (abierto) h += '<div class="det">' + detalle(e) + '</div>';
+      if (abierto) h += '<div class="det">' + detalle(e, E, ahora) + '</div>';
     });
     h += '</section>';
 

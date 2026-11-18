@@ -90,12 +90,27 @@ async function leerPrioridades() {
   }
 }
 
+// Ventanas horarias de entrega: hoja "Tablero-de-ruta_Clientes-actualizado", columnas
+// D (Cliente), F (Razón social) y BO (Horario Ent., formato "hh:mm a hh:mm; hh:mm a hh:mm").
+const HOJA_VENTANAS = 'https://docs.google.com/spreadsheets/d/1o6Y0is6NK0BTW0z4Gj5coFKQ_3SFc9ZYArQYoaERDio/gviz/tq?tqx=out:csv&headers=1&sheet=' + encodeURIComponent('Hoja 1') + '&tq=' + encodeURIComponent('select D, F, BO');
+async function leerVentanas() {
+  try {
+    const r = await fetch(HOJA_VENTANAS, { credentials: 'include', cache: 'no-store' });
+    const texto = await r.text();
+    if (!r.ok || /^\s*<(!doctype|html)/i.test(texto)) throw new Error('Google no dejó leer la hoja de ventanas horarias (' + r.status + '). Revisá que esté compartida con tu usuario.');
+    return { ok: true, data: { csv: texto, at: Date.now() } };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
 // Un solo pedido en curso por fuente.
 const enCurso = {};
 function atender(msg) {
   if (msg && msg.tipo === 'ping') return Promise.resolve({ ok: true, version: VERSION });
   const clave = msg && msg.tipo;
   if (clave === 'prioridades') return leerPrioridades();
+  if (clave === 'ventanas') return leerVentanas();
   if (!FUENTES[clave]) return Promise.resolve({ ok: false, error: 'Pedido desconocido.' });
   if (!enCurso[clave]) {
     enCurso[clave] = leer(clave)
