@@ -336,6 +336,7 @@ async function leerChess() {
     }
     const fechaHoy = dia(hoy);
     const porPatente = {};
+    let camposRep = '';
     filas.forEach((e) => {
       if (e.fecentrecbt && e.fecentrecbt !== fechaHoy) return;
       const pat = String(e.cPatente || '').trim().toUpperCase();
@@ -362,7 +363,12 @@ async function leerChess() {
         cli.nRe++;
         if (e.cMotivoRechazo && cli.motivos.indexOf(e.cMotivoRechazo) < 0) cli.motivos.push(e.cMotivoRechazo);
       }
-      cli.items.push({ articulo: e.ccodart, bultos: bultos, importe: importe, ret: ret, rechazado: estado === 'RECHAZADO' });
+      // Usuario emisor: columna "usuario emisor" si existe; si no, la primera columna de usuario con dato.
+      let usuario = '';
+      Object.keys(e).forEach((k) => { if (!usuario && /usu/i.test(k) && /emi/i.test(k) && e[k]) usuario = String(e[k]); });
+      Object.keys(e).forEach((k) => { if (!usuario && /usu|user/i.test(k) && typeof e[k] === 'string' && e[k].trim()) usuario = e[k]; });
+      if (!camposRep) camposRep = Object.keys(e).map((k) => k + '=' + String(e[k]).replace(/\d{6,}/g, '#').slice(0, 25)).join(' | ');
+      cli.items.push({ articulo: e.ccodart, bultos: bultos, importe: importe, ret: ret, rechazado: estado === 'RECHAZADO', usuario: usuario.trim().toUpperCase() });
     });
     Object.keys(porPatente).forEach((k) => {
       const cam = porPatente[k];
@@ -377,7 +383,7 @@ async function leerChess() {
     // Hora real de entrega: liquidación de cada camión (pantalla "Ver liquidación").
     let liq = { ok: 0, error: '' };
     try { liq = await horasDeLiquidacion(porPatente); } catch (e) { liq.error = String((e && e.message) || e); }
-    return { data: porPatente, at: Date.now(), liq: liq };
+    return { data: porPatente, at: Date.now(), liq: liq, camposRep: camposRep };
   } catch (e) {
     return { error: String((e && e.message) || e) };
   }

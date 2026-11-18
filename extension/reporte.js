@@ -228,9 +228,17 @@
     if (/^ENTREGA/.test(s)) return 'entregado';
     return '';
   }
+  // Rechazos cargados por estos usuarios en Chess son devoluciones.
+  var USUARIOS_DEVOLUCION = ['CGORDONES'];
+  function esDevolucion(it) { return !!(it && it.rechazado && it.usuario && USUARIOS_DEVOLUCION.indexOf(it.usuario) >= 0); }
+  function clienteDevolucion(c) {
+    var r = (c.items || []).filter(function (it) { return it.rechazado; });
+    return r.length > 0 && r.every(esDevolucion);
+  }
   function pillEstado(c) {
-    if (c.est === 'rechazado') return '<span class="pill p-re">Rechazado</span>';
-    if (c.est === 'parcial') return '<span class="pill p-re">Rechazo parcial</span>';
+    var dev = clienteDevolucion(c);
+    if (c.est === 'rechazado') return '<span class="pill p-re">' + (dev ? 'Devolución' : 'Rechazado') + '</span>';
+    if (c.est === 'parcial') return '<span class="pill p-re">' + (dev ? 'Devolución parcial' : 'Rechazo parcial') + '</span>';
     if (c.est === 'entregado') return '<span class="pill p-ok">Entregado</span>';
     if (c.nbEstado) return '<span class="pill p-pe">' + esc(c.nbEstado.replace(/_/g, ' ').toLowerCase().replace(/^./, function (x) { return x.toUpperCase(); })) + '</span>';
     return '<span class="pill p-pe">' + (c.leidoNextbyn ? 'Pendiente' : 'En reparto') + '</span>';
@@ -416,7 +424,7 @@
     var v = vt && vt.mapa && c.codigo ? vt.mapa[c.codigo] : null;
     var f = v ? v.f : [], r = { f: f, nota: v ? v.nota : '', sinVentana: !f.length };
     var entregado = c.est === 'entregado' || c.est === 'parcial';
-    if (c.est === 'rechazado') { r.st = 'rech'; return r; }
+    if (c.est === 'rechazado') { r.st = 'rech'; r.dev = clienteDevolucion(c); return r; }
     if (entregado) {
       if (r.sinVentana) { r.st = 'ok'; r.h = horaEntrega(pat, c); return r; }
       r.h = horaEntrega(pat, c);
@@ -515,7 +523,7 @@
       return h + '<span class="ot-txt pend ' + r.riesgo + '"><b>' + TXT_RIESGO[r.riesgo] + '</b> ' + esc(sub) + ', llega ~' + hhmm(r.eta) +
         (r.riesgo === 'riesgo' ? ' (cierra ' + cierre + ')' : '') + '</span>';
     }
-    return h + '<span class="ot-txt ' + r.st + '"><b>' + TXT_OT[r.st] + (r.temprano ? ' (antes)' : '') + '</b> ' + esc(sub) + '</span>';
+    return h + '<span class="ot-txt ' + r.st + '"><b>' + (r.dev ? 'Devolución' : TXT_OT[r.st]) + (r.temprano ? ' (antes)' : '') + '</b> ' + esc(sub) + '</span>';
   }
   var TXT_RIESGO = { riesgo: 'En riesgo', justo: 'Justo', antes: 'Llega antes', ok: 'Pendiente', sin: 'Pendiente' };
   function tituloOT(r) {
@@ -549,20 +557,25 @@
   // Productos del cliente: si hubo rechazo, primero un resumen (total o parcial) y los SKU rechazados.
   function detalleProductos(c) {
     var items = c.items || [], rech = items.filter(function (it) { return it.rechazado; }), ent = items.filter(function (it) { return !it.rechazado; });
+    var dev = rech.length > 0 && rech.every(esDevolucion), mixto = !dev && rech.some(esDevolucion);
     var suma = function (l, k) { return l.reduce(function (a, it) { return a + (+it[k] || 0); }, 0); };
     var fila = function (it) {
       return '<tr' + (it.rechazado ? ' class="sku-rech"' : '') + '><td>' + esc(it.articulo) + (it.ret ? ' <span class="pill p-pe">RET</span>' : '') +
+        (mixto && esDevolucion(it) ? ' <span class="pill p-pe">Devolución</span>' : '') +
         '</td><td class="n">' + num(it.bultos) + ' bultos</td><td class="n">' + plata(it.importe) + '</td></tr>';
     };
     var h = '';
     if (rech.length) {
       var total = !ent.length;
       var bR = suma(rech, 'bultos'), bT = suma(items, 'bultos');
-      h += '<div class="rech-res ' + (total ? 'total' : 'parcial') + '"><b>' + (total ? 'Rechazo total' : 'Rechazo parcial') + '</b> ' +
+      var titulo = dev ? (total ? 'Devolución total' : 'Devolución parcial') : (total ? 'Rechazo total' : 'Rechazo parcial');
+      h += '<div class="rech-res ' + (total ? 'total' : 'parcial') + '"><b>' + titulo + '</b> ' +
         rech.length + ' de ' + items.length + ' SKU, ' + num(bR) + ' de ' + num(bT) + ' bultos (' + (bT ? Math.round((bR / bT) * 100) : 0) + '%), ' +
         plata(suma(rech, 'importe')) + ' de ' + plata(suma(items, 'importe')) +
-        (c.motivos && c.motivos.length ? '. Motivo: ' + esc(c.motivos.join(', ')) : '') + '</div>';
-      h += '<table class="skus"><tbody><tr class="sub"><td colspan="3">SKU rechazados (' + rech.length + ')</td></tr>' + rech.map(fila).join('');
+        (c.motivos && c.motivos.length ? '. Motivo: ' + esc(c.motivos.join(', ')) : '') +
+        (mixto ? '. Incluye ' + rech.filter(esDevolucion).length + ' SKU de devolución.' : '') + '</div>';
+      if (!rech.some(function (it) { return it.usuario; })) h += '<p class="h-nota" title="' + esc('Columnas del reporte de Chess: ' + ((ch && ch.camposRep) || 'sin datos')) + '">Chess no informa el usuario emisor de este rechazo, así que no se puede distinguir si es devolución.</p>';
+      h += '<table class="skus"><tbody><tr class="sub"><td colspan="3">' + (dev ? 'SKU devueltos' : 'SKU rechazados') + ' (' + rech.length + ')</td></tr>' + rech.map(fila).join('');
       if (ent.length) h += '<tr class="sub"><td colspan="3">SKU entregados (' + ent.length + ')</td></tr>' + ent.map(fila).join('');
       return h + '</tbody></table>';
     }
@@ -671,28 +684,43 @@
     cams.forEach(function (e) { cuenta[e.sem]++; tot.h += e.hechos; tot.r += e.rechazos; tot.t += e.total; });
     var enRuta = cams.filter(function (e) { return e.estado === 'ABIERTA'; }).length;
     // OT de la flota: suma de los camiones con detalle de clientes.
-    var otF = { ok: 0, total: 0, vis: 0 }, otCam = {};
+    var otF = { ok: 0, total: 0, vis: 0, fuera: 0, rech: 0 }, otCam = {};
     cams.forEach(function (e) {
       var o = otDeCamion(String(e.patente).toUpperCase(), ahora);
       otCam[e.patente] = o;
       otF.ok += o.ok; otF.total += o.total; otF.vis += o.visitados;
+      otF.fuera += o.fuera; otF.rech += o.rech;
     });
 
     // Resumen de la flota
     var nombres = { rojo: 'Demorados', amarillo: 'Ajustados', azul: 'Recién salen', verde: 'En horario', gris: 'Finalizados' };
-    var h = '<section class="flota"><div><div class="comp-barra">' +
-      Object.keys(cuenta).map(function (k) { return cuenta[k] ? '<i class="' + k + '" style="width:' + (cuenta[k] / cams.length) * 100 + '%"></i>' : ''; }).join('') +
-      '</div><div class="comp-ley">' +
-      Object.keys(cuenta).map(function (k) { return '<span><i class="' + k + '"></i><b>' + cuenta[k] + '</b>' + nombres[k] + '</span>'; }).join('') +
-      '</div></div><div class="cifras">' +
-      '<div class="cifra"><b>' + enRuta + '</b><span>en ruta de ' + cams.length + '</span></div>' +
-      '<div class="cifra"><b>' + tot.h + '<small style="font-size:18px;color:var(--tenue)"> / ' + tot.t + '</small></b><span>clientes visitados</span></div>' +
-      '<div class="cifra"><b>' + (tot.t ? Math.round((tot.h / tot.t) * 100) : 0) + '%</b><span>avance general</span></div>' +
-      '<div class="cifra" title="A tiempo sobre clientes ya visitados (entregados o rechazados)"><b>' + pct(otF.ok, otF.vis) + '</b><span>OT en vivo, ' + otF.ok + ' de ' + otF.vis + ' visitados</span></div>' +
-      '<div class="cifra" title="Pedidos entregados dentro de su ventana horaria sobre el total de pedidos del día (clientes sin ventana: cumplido al entregar)"><b>' + pct(otF.ok, otF.total) + '</b><span>OT del día, sobre ' + otF.total + ' pedidos</span></div>' +
-      '<div class="cifra' + (riesgoF ? ' mal' : '') + '" title="Pendientes que, con el ritmo actual y la secuencia de Nextbyn, llegarían después de que cierre su ventana"><b>' + riesgoF + '</b><span>clientes en riesgo</span></div>' +
-      '<div class="cifra' + (tot.r ? ' mal' : '') + '"><b>' + tot.r + '</b><span>rechazos</span></div>' +
-      '</div></section>';
+    // Resumen de la flota en cuatro grupos: flota, avance, OT y alertas.
+    var avance = tot.t ? Math.round((tot.h / tot.t) * 100) : 0;
+    var otV = otF.vis ? otF.ok / otF.vis : 0;
+    var nivel = function (v) { return v >= 0.9 ? 'bien' : v >= 0.75 ? 'medio' : 'mal'; };
+    var h = '<section class="resumen" aria-label="Resumen de la flota">' +
+      // Flota
+      '<div class="grupo g-flota"><h2>Flota</h2>' +
+      '<p class="dato"><b>' + enRuta + '</b> <span>en ruta de ' + cams.length + '</span></p>' +
+      '<div class="comp-barra">' + Object.keys(cuenta).map(function (k) { return cuenta[k] ? '<i class="' + k + '" style="width:' + (cuenta[k] / cams.length) * 100 + '%" title="' + cuenta[k] + ' ' + nombres[k].toLowerCase() + '"></i>' : ''; }).join('') + '</div>' +
+      '<div class="comp-ley">' + Object.keys(cuenta).map(function (k) { return '<span' + (cuenta[k] ? '' : ' class="cero"') + '><i class="' + k + '"></i><b>' + cuenta[k] + '</b> ' + nombres[k] + '</span>'; }).join('') + '</div></div>' +
+      // Avance
+      '<div class="grupo g-avance"><h2>Avance</h2>' +
+      '<p class="dato"><b>' + avance + '%</b> <span>' + tot.h + ' de ' + tot.t + ' clientes visitados</span></p>' +
+      '<div class="medidor"><i style="width:' + avance + '%"></i></div>' +
+      '<p class="pie">Faltan ' + Math.max(0, tot.t - tot.h) + ' clientes</p></div>' +
+      // OT
+      '<div class="grupo g-ot"><h2>Entregas en ventana (OT)</h2><div class="dos">' +
+      '<p class="dato ' + nivel(otV) + '" title="A tiempo sobre clientes ya visitados (entregados o rechazados)"><b>' + pct(otF.ok, otF.vis) + '</b> <span>en vivo<br>' + otF.ok + ' de ' + otF.vis + ' visitados</span></p>' +
+      '<p class="dato" title="Pedidos entregados dentro de su ventana sobre el total de pedidos del día"><b>' + pct(otF.ok, otF.total) + '</b> <span>del día<br>sobre ' + otF.total + ' pedidos</span></p></div>' +
+      '<div class="medidor ot" title="De los visitados: a tiempo, fuera de ventana y rechazados">' +
+      (otF.vis ? '<i class="ok" style="width:' + (otF.ok / otF.vis) * 100 + '%"></i><i class="fuera" style="width:' + (otF.fuera / otF.vis) * 100 + '%"></i><i class="rech" style="width:' + (otF.rech / otF.vis) * 100 + '%"></i>' : '') + '</div>' +
+      '<p class="pie"><i class="ok"></i>' + otF.ok + ' a tiempo <i class="fuera"></i>' + otF.fuera + ' fuera de ventana <i class="rech"></i>' + otF.rech + ' rechazados</p></div>' +
+      // Alertas
+      '<div class="grupo g-alertas"><h2>A revisar</h2>' +
+      '<p class="dato' + (riesgoF ? ' mal' : '') + '" title="Pendientes que, con el ritmo actual y la secuencia de Nextbyn, llegarían después de que cierre su ventana"><b>' + riesgoF + '</b> <span>' + (riesgoF === 1 ? 'cliente' : 'clientes') + ' en riesgo de llegar fuera de ventana</span></p>' +
+      '<p class="dato chico' + (tot.r ? ' mal' : '') + '"><b>' + tot.r + '</b> <span>' + (tot.r === 1 ? 'rechazo' : 'rechazos') + '</span></p></div>' +
+      '</section>';
 
     // Rutas con su línea del día
     h += '<div class="layout"><section class="rutas" aria-label="Rutas de hoy"><div class="eje"><span>Camión</span><span>Estado</span>' + eje(E, ahora) +
