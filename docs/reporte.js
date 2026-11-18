@@ -41,7 +41,8 @@
   var CLAVE_PRIO = 'ltReportePrio';
   var pr = leerLS(CLAVE_PRIO, null); // { mapa, at }
   var CLAVE_VENT = 'ltReporteVent', CLAVE_OBS = 'ltReporteObs';
-  var vt = leerLS(CLAVE_VENT, null); // { mapa: { codigo: { f: [[desde, hasta] en minutos], nota } }, at }
+  var vt = leerLS(CLAVE_VENT, null); // { v: 2, mapa: { codigo: { f: [[desde, hasta] en minutos], nota, pago } }, at }
+  if (vt && vt.v !== 2) vt = null; // caché anterior sin el dato de pago pendiente
   var errVt = '', leyendoVt = false;
   var abiertos = {}, clientesAbiertos = {};
   var ocupado = { nextbyn: false, chess: false };
@@ -92,7 +93,7 @@
     if (leyendoVt) return;
     leyendoVt = true;
     pedir('ventanas').then(function (data) {
-      vt = { mapa: armarVentanas(data.csv), at: data.at };
+      vt = { v: 2, mapa: armarVentanas(data.csv), at: data.at };
       errVt = '';
       guardarLS(CLAVE_VENT, vt);
     }).catch(function (e) {
@@ -371,7 +372,9 @@
   }
 
   // ---------- OT: entregas dentro de la ventana horaria ----------
-  // Hoja de ventanas (select D, F, BO): código de cliente, razón social, "hh:mm a hh:mm; hh:mm a hh:mm".
+  // Hoja de clientes (select D, F, BO, W, CA): código, razón social, "hh:mm a hh:mm; hh:mm a hh:mm",
+  // comentario y descripción de sub-línea. Pago pendiente autorizado: comentario con "AUTORIZADO"
+  // (no "NO AUTORIZADO") o cliente en cuenta corriente.
   function armarVentanas(csv) {
     var filas = leerCSV(csv), mapa = {}, n = 0;
     filas.forEach(function (f) {
@@ -380,11 +383,27 @@
       var txt = String(f[2] || '').trim(), fr = [], re = /(\d{2}):(\d{2}) a (\d{2}):(\d{2})/g, m;
       while ((m = re.exec(txt))) fr.push([+m[1] * 60 + +m[2], +m[3] * 60 + +m[4]]);
       var limpio = /^\d{2}:\d{2} a \d{2}:\d{2}(; \d{2}:\d{2} a \d{2}:\d{2})*$/.test(txt);
-      mapa[cod] = { f: limpio ? fr : [], nota: !limpio && txt ? txt : '' };
+      mapa[cod] = { f: limpio ? fr : [], nota: !limpio && txt ? txt : '', pago: pagoAutorizado(f[3], f[4]) };
       n++;
     });
     if (!n) throw new Error('La hoja de ventanas horarias no tiene clientes con código.');
     return mapa;
+  }
+  function pagoAutorizado(comentario, subLinea) {
+    var com = String(comentario || '').toUpperCase(), sub = String(subLinea || '').toUpperCase().trim();
+    if (/\bAUTORIZADO\b/.test(com) && !/\bNO\s+AUTORIZADO\b/.test(com)) return 'com';
+    if (sub === 'CUENTA CORRIENTE') return 'cc';
+    if (sub === 'AUTORIZADO') return 'com';
+    return '';
+  }
+  // Columna "Pago pendiente" de la lista de clientes.
+  function pillPago(c) {
+    if (!vt) return '<span class="tenue">—</span>';
+    var v = c.codigo ? vt.mapa[c.codigo] : null;
+    if (!v) return '<span class="pill p-pe" title="El cliente no está en la hoja de clientes">Sin dato</span>';
+    if (v.pago === 'cc') return '<span class="pill p-ok" title="Cliente en cuenta corriente">Autorizado</span><span class="pago-por">Cta. corriente</span>';
+    if (v.pago) return '<span class="pill p-ok" title="Comentario de la hoja de clientes: AUTORIZADO">Autorizado</span>';
+    return '<span class="pill p-na">No autorizado</span>';
   }
   function minDelDia(t) { var d = new Date(t); return d.getHours() * 60 + d.getMinutes(); }
   function hm(min) { return ('0' + Math.floor(min / 60)).slice(-2) + ':' + ('0' + (min % 60)).slice(-2); }
@@ -606,8 +625,8 @@
       var lista = listaClientes(pat);
       ordenarClientes(pat, lista, ahora);
       return '<div class="dres"><span>' + msg + '</span><span>Clientes <b>' + lista.length + '</b></span><span>Entregados <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span>' + resumenOT(otDeCamion(pat, ahora)) + resumenRiesgo(pat, ahora) + avisoOT() + '</div>' +
-        '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-dom">Domicilio</th><th class="h-ot">Ventana y entrega</th></tr></thead><tbody>' +
-        lista.map(function (c) { var r = evaluarOT(pat, c, ahora); return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b>' + notaVentana(r) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-ot">' + lineaCliente(r, E, ahora) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+        '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-ot">Ventana y entrega</th><th class="h-pago">Pago pendiente</th><th class="h-dom">Domicilio</th></tr></thead><tbody>' +
+        lista.map(function (c) { var r = evaluarOT(pat, c, ahora); return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b>' + notaVentana(r) + '</td><td class="h-ot">' + lineaCliente(r, E, ahora) + '</td><td class="h-pago">' + pillPago(c) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
 
     // Con Chess: cruza cada cliente con su estado en Nextbyn.
@@ -621,15 +640,15 @@
       '<span>Importe <b>' + plata(dc.importe) + '</b></span><span>Bultos <b>' + Math.round(dc.bultos) + '</b></span>' +
       '<span>Cajones retornables <b>' + Math.round(dc.cajones) + '</b></span>' +
       (hayNb ? '' : '<span>Sin estados de Nextbyn: el estado sale de Chess.</span>') + resumenOT(otDeCamion(pat, ahora)) + resumenRiesgo(pat, ahora) + avisoOT() + '</div>' +
-      '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-ot">Ventana y entrega</th><th class="h-dom">Domicilio</th><th class="h-loc">Localidad</th><th class="h-comp">Comprobante</th><th class="n">Importe</th><th class="n">Bultos</th><th class="n">Cajones</th></tr></thead><tbody>';
+      '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-ot">Ventana y entrega</th><th class="h-pago">Pago pendiente</th><th class="h-dom">Domicilio</th><th class="h-loc">Localidad</th><th class="h-comp">Comprobante</th><th class="n">Importe</th><th class="n">Bultos</th><th class="n">Cajones</th></tr></thead><tbody>';
     cs.forEach(function (c) {
       var k = pat + '|' + c.cliente, abierto = !!clientesAbiertos[k], rOT = evaluarOT(pat, c, ahora);
       h += '<tr class="cl" data-cl="' + esc(k) + '"><td>' + pillEstado(c) +
         (c.motivos && c.motivos.length ? '<span class="motivo">' + esc(c.motivos.join(', ')) + '</span>' : '') +
-        '</td><td><span class="car' + (abierto ? ' rot' : '') + '">▸</span><b>' + esc(c.cliente) + '</b>' + notaVentana(rOT) + '</td><td class="h-ot">' + lineaCliente(rOT, E, ahora) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-loc">' + esc(c.localidad) +
+        '</td><td><span class="car' + (abierto ? ' rot' : '') + '">▸</span><b>' + esc(c.cliente) + '</b>' + notaVentana(rOT) + '</td><td class="h-ot">' + lineaCliente(rOT, E, ahora) + '</td><td class="h-pago">' + pillPago(c) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-loc">' + esc(c.localidad) +
         '</td><td class="h-comp" style="font-size:13px">' + esc(c.comprobantes.join(', ')) + '</td><td class="n">' + plata(c.importe) + '</td><td class="n">' + num(c.bultos) + '</td><td class="n">' + num(c.cajones) + '</td></tr>';
       if (abierto) {
-        h += '<tr class="prod"><td colspan="9">' + detalleProductos(c) + '</td></tr>';
+        h += '<tr class="prod"><td colspan="10">' + detalleProductos(c) + '</td></tr>';
       }
     });
     return h + '</tbody></table></div>';
