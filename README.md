@@ -22,6 +22,14 @@ OT = pedidos entregados dentro de su ventana horaria ÷ total de pedidos del dí
 
 La hora de entrega sale de la liquidación de Chess de cada camión (`liquidacion/planillasPendientes` para encontrar la jornada abierta y `liquidacion/estadoLiquidacion` para los comprobantes, campo `fhvisita`); es la misma consulta que hace la pantalla "Ver liquidación". Si no está, se toma de Nextbyn cuando la grilla de Clientes la trae, y si tampoco, el reporte registra la hora en que vio al cliente pasar de pendiente a entregado; los clientes que ya figuraban entregados al abrir el reporte quedan "sin hora".
 
+## Histórico de OT
+
+La pestaña **Histórico** del reporte guarda y muestra el OT de cada día. Los datos quedan en la hoja [Histórico OT](https://docs.google.com/spreadsheets/d/1kqOCYxMQEhT1TWf43lYzvaN4Oc0m-2GKAhoh2IaPC7k/edit) (pestañas Flota, Camiones y Clientes).
+
+- **Guardado:** el reporte manda el OT del día por camión y por cliente cada 30 minutos, cuando un camión cierra la jornada y una vez después de las 18:00. Cada envío reemplaza las filas del mismo día y patente.
+- **Cómo escribe:** a través del script `apps-script/Codigo.gs`, publicado como aplicación web desde la propia hoja (Extensiones → Apps Script → Implementar → Aplicación web, ejecutar como "Yo", acceso "Cualquier persona"). La URL `/exec` se pega una vez en la pestaña Histórico de cada PC. El script solo acepta envíos con la clave que trae la extensión.
+- **Lectura:** la extensión lee las pestañas Camiones y Clientes como CSV con la sesión de Google del usuario.
+
 ## Horarios de referencia
 
 | | Apertura de ruta | Fin de jornada |

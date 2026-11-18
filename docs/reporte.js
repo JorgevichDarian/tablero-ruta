@@ -49,7 +49,8 @@
 
   // ---------- conexión con la extensión ----------
   function enExtension() { return location.protocol === 'chrome-extension:'; }
-  function pedir(tipo) {
+  function pedir(tipo, extra) {
+    var msg = Object.assign({ tipo: tipo }, extra || {});
     return new Promise(function (resolve, reject) {
       function cb(r) {
         var le = chrome.runtime && chrome.runtime.lastError;
@@ -57,8 +58,8 @@
         r.ok ? resolve(r.data) : reject(new Error(r.error));
       }
       try {
-        if (enExtension()) chrome.runtime.sendMessage({ tipo: tipo }, cb);
-        else if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage(EXT_ID, { tipo: tipo }, cb);
+        if (enExtension()) chrome.runtime.sendMessage(msg, cb);
+        else if (window.chrome && chrome.runtime && chrome.runtime.sendMessage) chrome.runtime.sendMessage(EXT_ID, msg, cb);
         else reject(new Error('NOEXT'));
       } catch (e) { reject(new Error('NOEXT')); }
     });
@@ -76,7 +77,7 @@
       var m = String(e.message || e);
       if (m === 'NOEXT') { sinExtension = true; m = 'Falta la extensión'; }
       if (tipo === 'nextbyn') errNb = m; else errCh = m;
-    }).then(function () { ocupado[tipo] = false; pintar(); });
+    }).then(function () { ocupado[tipo] = false; pintar(); quizasGuardar(); });
   }
 
   function actualizarTodo() {
@@ -627,6 +628,174 @@
     if (popPat) refrescarPopover();
   }
 
+  // ---------- histórico OT ----------
+  var HOJA_HIST_URL = 'https://docs.google.com/spreadsheets/d/1kqOCYxMQEhT1TWf43lYzvaN4Oc0m-2GKAhoh2IaPC7k/edit';
+  var CLAVE_HIST_CFG = 'ltReporteHistCfg';
+  var hcfg = Object.assign({ url: '', dias: 30, ultimo: 0, cerrados: '', foto18: '' }, leerLS(CLAVE_HIST_CFG, {}));
+  var hdat = null, herr = '', hleyendo = false, hguardando = false, hmsg = '';
+  function guardarCfgHist() { guardarLS(CLAVE_HIST_CFG, hcfg); }
+  function fechaISO(d) { d = d || new Date(); return d.getFullYear() + '-' + ('0' + (d.getMonth() + 1)).slice(-2) + '-' + ('0' + d.getDate()).slice(-2); }
+
+  // Arma lo que se guarda: una fila por camión con detalle de clientes y una por cliente.
+  function datosHistorico() {
+    if (!nb) return null;
+    var ahora = new Date(), fecha = fechaISO(ahora), camiones = [], clientes = [];
+    nb.cams.forEach(function (cam) {
+      var pat = String(cam.patente).toUpperCase(), lista = listaClientes(pat);
+      if (!lista.length) return;
+      var o = otDeCamion(pat, ahora), dc = ch && ch.data && ch.data[pat];
+      camiones.push({ fecha: fecha, patente: pat, chofer: dc ? String(dc.chofer || '').replace(/^\d+\s*-\s*/, '') : '',
+        jornada: dc && dc.jornadaLiq ? dc.jornadaLiq.join(', ') : '', estado: cam.estado === 'CERRADA' ? 'Cerrada' : 'Abierta',
+        pedidos: o.total, ok: o.ok, fuera: o.fuera, sinhora: o.sinhora, vencido: o.vencido, pend: o.pend, rech: o.rech });
+      lista.forEach(function (c) {
+        var r = evaluarOT(pat, c, ahora);
+        clientes.push({ fecha: fecha, patente: pat, codigo: c.codigo || '', cliente: String(c.cliente).replace(/^\s*\d+\s*-\s*/, ''),
+          ventana: r.f.length ? textoVentana(r.f) : r.nota || 'Sin ventana', hora: r.h ? hhmm(r.h.t) : '',
+          resultado: TXT_OT[r.st], fuente: r.h ? ({ chess: 'Liquidación Chess', nextbyn: 'Nextbyn', reporte: 'Visto por el reporte' })[r.h.fuente] : '',
+          prox: r.h && r.h.prox != null ? Math.round(r.h.prox) : '' });
+      });
+    });
+    return camiones.length ? { camiones: camiones, clientes: clientes } : null;
+  }
+
+  // Guarda cada 30 minutos, cuando un camión cierra la jornada y una vez después de las 18:00.
+  function quizasGuardar() {
+    if (!hcfg.url || !nb || !ch || hguardando) return;
+    var ahora = new Date(), hoyS = fechaISO(ahora);
+    var cerrados = nb.cams.filter(function (c) { return c.estado === 'CERRADA'; }).map(function (c) { return c.patente; }).sort().join(',');
+    var motivo = '';
+    if (Date.now() - hcfg.ultimo > 30 * 6e4) motivo = 'periódico';
+    else if (cerrados !== hcfg.cerrados) motivo = 'cierre de jornada';
+    else if (ahora.getHours() >= 18 && hcfg.foto18 !== hoyS) motivo = 'cierre del día';
+    if (motivo) guardarHistorico();
+  }
+  function guardarHistorico() {
+    var datos = datosHistorico();
+    if (!hcfg.url) { hmsg = 'Falta pegar la dirección del script (paso 2).'; pintarHistorico(); return Promise.resolve(); }
+    if (!datos) { hmsg = 'Todavía no hay datos de hoy para guardar: tocá Actualizar todo en el Tablero.'; pintarHistorico(); return Promise.resolve(); }
+    hguardando = true; pintarHistorico();
+    return pedir('guardarHistorico', { url: hcfg.url, datos: datos }).then(function (r) {
+      var ahora = new Date();
+      hcfg.ultimo = Date.now();
+      hcfg.cerrados = nb.cams.filter(function (c) { return c.estado === 'CERRADA'; }).map(function (c) { return c.patente; }).sort().join(',');
+      if (ahora.getHours() >= 18) hcfg.foto18 = fechaISO(ahora);
+      guardarCfgHist();
+      hmsg = 'Guardado a las ' + hhmm(ahora) + ': ' + r.camiones + (r.camiones === 1 ? ' camión' : ' camiones') + ' y ' + r.clientes + (r.clientes === 1 ? ' cliente.' : ' clientes.');
+      herr = '';
+    }).catch(function (e) {
+      hmsg = '';
+      herr = String(e.message || e) === 'NOEXT' ? 'Falta la extensión.' : 'No se pudo guardar: ' + (e.message || e);
+    }).then(function () { hguardando = false; pintarHistorico(); });
+  }
+
+  function abrirHistorico() { if (!hdat && !hleyendo) leerHistorico(); else pintarHistorico(); }
+  function leerHistorico() {
+    hleyendo = true; pintarHistorico();
+    var d = new Date(); d.setDate(d.getDate() - hcfg.dias + 1);
+    return pedir('historico', { desde: fechaISO(d) }).then(function (r) {
+      hdat = { camiones: filasHist(r.camiones, ['fecha', 'patente', 'chofer', 'pedidos', 'ok', 'fuera', 'sinhora', 'vencido', 'pend', 'rech']),
+        clientes: filasHist(r.clientes, ['fecha', 'patente', 'codigo', 'cliente', 'ventana', 'resultado']), at: r.at };
+      herr = '';
+    }).catch(function (e) { herr = String(e.message || e) === 'NOEXT' ? 'Falta la extensión.' : String(e.message || e); })
+      .then(function () { hleyendo = false; pintarHistorico(); });
+  }
+  function filasHist(csv, campos) {
+    return leerCSV(csv || '').slice(1).filter(function (f) { return f[0]; }).map(function (f) {
+      var o = {};
+      campos.forEach(function (c, i) { o[c] = f[i] == null ? '' : String(f[i]).trim(); });
+      var m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(o.fecha);
+      if (m) o.fecha = m[3] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[1]).slice(-2);
+      o.fecha = o.fecha.slice(0, 10);
+      ['pedidos', 'ok', 'fuera', 'sinhora', 'vencido', 'pend', 'rech'].forEach(function (k) { if (k in o) o[k] = +o[k] || 0; });
+      return o;
+    });
+  }
+
+  // Gráfico de barras del OT diario de la flota (SVG).
+  function graficoOT(dias) {
+    if (!dias.length) return '<p class="h-vacio">Todavía no hay días guardados en este rango.</p>';
+    var W = Math.max(640, dias.length * 34), H = 220, pad = { l: 40, r: 10, t: 22, b: 34 };
+    var bw = (W - pad.l - pad.r) / dias.length, y = function (v) { return pad.t + (1 - v) * (H - pad.t - pad.b); };
+    var g = '<svg viewBox="0 0 ' + W + ' ' + H + '" width="' + W + '" height="' + H + '" class="h-graf" role="img" aria-label="OT diario de la flota">';
+    [0, 0.25, 0.5, 0.75, 1].forEach(function (v) {
+      g += '<line x1="' + pad.l + '" x2="' + (W - pad.r) + '" y1="' + y(v) + '" y2="' + y(v) + '" class="h-grid"/><text x="' + (pad.l - 6) + '" y="' + (y(v) + 4) + '" class="h-eje" text-anchor="end">' + Math.round(v * 100) + '%</text>';
+    });
+    dias.forEach(function (d, i) {
+      var v = d.pedidos ? d.ok / d.pedidos : 0, x = pad.l + i * bw + bw * 0.18, w = bw * 0.64;
+      var cls = v >= 0.9 ? 'b-ok' : v >= 0.75 ? 'b-med' : 'b-mal';
+      g += '<rect x="' + x + '" y="' + y(v) + '" width="' + w + '" height="' + (y(0) - y(v)) + '" class="' + cls + '" rx="2"><title>' + d.fecha + ': OT ' + Math.round(v * 100) + '% (' + d.ok + ' de ' + d.pedidos + ' a tiempo, ' + d.camiones + ' camiones)</title></rect>';
+      if (dias.length <= 31) g += '<text x="' + (x + w / 2) + '" y="' + (y(v) - 5) + '" class="h-val" text-anchor="middle">' + Math.round(v * 100) + '</text>';
+      if (dias.length <= 16 || i % Math.ceil(dias.length / 16) === 0) g += '<text x="' + (x + w / 2) + '" y="' + (H - 12) + '" class="h-eje" text-anchor="middle">' + d.fecha.slice(8, 10) + '/' + d.fecha.slice(5, 7) + '</text>';
+    });
+    return g + '</svg>';
+  }
+
+  function pintarHistorico() {
+    var el = $('historico');
+    if (!el) return;
+    var h = '<div class="h-cab"><div><h2>Histórico de OT</h2><p>Pedidos entregados dentro de su ventana horaria sobre el total de pedidos de cada día. Los datos quedan en la hoja <a href="' + HOJA_HIST_URL + '" target="_blank" rel="noopener">Histórico OT</a>.</p></div>' +
+      '<div class="h-ctrl"><label>Período <select id="h-dias">' + [7, 30, 90, 365].map(function (n) { return '<option value="' + n + '"' + (hcfg.dias === n ? ' selected' : '') + '>Últimos ' + n + ' días</option>'; }).join('') + '</select></label>' +
+      '<button type="button" id="h-leer"' + (hleyendo ? ' disabled' : '') + '>' + (hleyendo ? 'Leyendo…' : 'Actualizar histórico') + '</button>' +
+      '<button type="button" id="h-guardar"' + (hguardando ? ' disabled' : '') + '>' + (hguardando ? 'Guardando…' : 'Guardar el día ahora') + '</button></div></div>';
+    if (herr) h += '<div class="err">' + esc(herr) + '</div>';
+    if (hmsg) h += '<p class="h-msg">' + esc(hmsg) + '</p>';
+    if (!hcfg.url) h += '<div class="h-setup"><h3>Configurar el guardado (una sola vez)</h3><ol>' +
+      '<li>Abrí la hoja <a href="' + HOJA_HIST_URL + '" target="_blank" rel="noopener">Histórico OT</a> y entrá a <b>Extensiones → Apps Script</b>.</li>' +
+      '<li>Borrá lo que aparece y pegá todo el código del archivo <a href="https://drive.google.com/file/d/1CSH4LK8JvPP7ZpJo2nDoAmPu5cHTcE_Q/view" target="_blank" rel="noopener">Codigo.gs</a> (está en la misma carpeta de Drive). Guardá con el ícono del disquete.</li>' +
+      '<li>Tocá <b>Implementar → Nueva implementación</b>, elegí el tipo <b>Aplicación web</b>, con <b>Ejecutar como: Yo</b> y <b>Quién tiene acceso: Cualquier persona</b>. Autorizá los permisos que pide Google.</li>' +
+      '<li>Copiá la <b>URL de la aplicación web</b> (termina en /exec) y pegala acá:</li></ol>' +
+      '<div class="h-url"><input id="h-url" placeholder="https://script.google.com/macros/s/…/exec"><button type="button" id="h-url-ok">Guardar dirección</button></div>' +
+      '<p class="h-nota">La dirección queda guardada en este Chrome. Cada PC que tenga el reporte abierto guarda los datos del día; si varias lo tienen abierto, queda el último envío.</p></div>';
+    else h += '<p class="h-estado">Guardado automático activo en este Chrome' + (hcfg.ultimo ? ', último envío a las ' + hhmm(hcfg.ultimo) : '') + '. <button type="button" class="h-link" id="h-url-cambiar">Cambiar dirección del script</button></p>';
+
+    if (hdat) {
+      var porDia = {}, porCam = {}, porCli = {};
+      hdat.camiones.forEach(function (r) {
+        var d = (porDia[r.fecha] = porDia[r.fecha] || { fecha: r.fecha, pedidos: 0, ok: 0, camiones: 0 });
+        d.pedidos += r.pedidos; d.ok += r.ok; d.camiones++;
+        var c = (porCam[r.patente] = porCam[r.patente] || { patente: r.patente, chofer: r.chofer, dias: 0, pedidos: 0, ok: 0, fuera: 0, vencido: 0 });
+        c.dias++; c.pedidos += r.pedidos; c.ok += r.ok; c.fuera += r.fuera; c.vencido += r.vencido; if (r.chofer) c.chofer = r.chofer;
+      });
+      hdat.clientes.forEach(function (r) {
+        var k = r.codigo || r.cliente;
+        var c = (porCli[k] = porCli[k] || { codigo: r.codigo, cliente: r.cliente, ventana: r.ventana, pedidos: 0, ok: 0, fuera: 0 });
+        c.pedidos++; if (r.resultado === 'A tiempo') c.ok++; if (r.resultado === 'Fuera de ventana' || r.resultado === 'Ventana vencida') c.fuera++;
+        c.ventana = r.ventana || c.ventana;
+      });
+      var dias = Object.keys(porDia).sort().map(function (k) { return porDia[k]; });
+      var tot = dias.reduce(function (a, d) { a.p += d.pedidos; a.o += d.ok; return a; }, { p: 0, o: 0 });
+      var ult = dias[dias.length - 1];
+      h += '<section class="h-bloque"><div class="h-kpis"><div class="cifra"><b>' + pct(tot.o, tot.p) + '</b><span>OT del período, ' + tot.o + ' de ' + tot.p + ' pedidos</span></div>' +
+        (ult ? '<div class="cifra"><b>' + pct(ult.ok, ult.pedidos) + '</b><span>último día guardado (' + ult.fecha.slice(8, 10) + '/' + ult.fecha.slice(5, 7) + ')</span></div>' : '') +
+        '<div class="cifra"><b>' + dias.length + '</b><span>días con datos</span></div></div>' +
+        '<h3>OT diario de la flota</h3><div class="h-scroll">' + graficoOT(dias) + '</div><p class="h-nota">Verde: 90% o más. Ámbar: de 75% a 89%. Rojo: menos de 75%.</p></section>';
+      var cams = Object.keys(porCam).map(function (k) { return porCam[k]; }).sort(function (a, b) { return (a.pedidos ? a.ok / a.pedidos : 0) - (b.pedidos ? b.ok / b.pedidos : 0); });
+      h += '<div class="h-dos"><section class="h-bloque"><h3>OT por camión</h3><table class="cli"><thead><tr><th>Camión</th><th>Chofer</th><th class="n">Días</th><th class="n">Pedidos</th><th class="n">Fuera de ventana</th><th class="n">OT</th></tr></thead><tbody>' +
+        cams.map(function (c) { return '<tr><td>' + chapa(c.patente) + '</td><td>' + esc(c.chofer) + '</td><td class="n">' + c.dias + '</td><td class="n">' + c.pedidos + '</td><td class="n">' + (c.fuera + c.vencido) + '</td><td class="n"><b>' + pct(c.ok, c.pedidos) + '</b></td></tr>'; }).join('') +
+        '</tbody></table></section>';
+      var clis = Object.keys(porCli).map(function (k) { return porCli[k]; }).filter(function (c) { return c.fuera; })
+        .sort(function (a, b) { return b.fuera - a.fuera || a.cliente.localeCompare(b.cliente); }).slice(0, 20);
+      h += '<section class="h-bloque"><h3>Clientes con más entregas fuera de ventana</h3>' + (clis.length ? '<table class="cli"><thead><tr><th>Cliente</th><th>Ventana</th><th class="n">Fuera</th><th class="n">Pedidos</th><th class="n">OT</th></tr></thead><tbody>' +
+        clis.map(function (c) { return '<tr><td><b>' + esc(c.codigo ? c.codigo + ' - ' : '') + esc(c.cliente) + '</b></td><td>' + esc(c.ventana) + '</td><td class="n">' + c.fuera + '</td><td class="n">' + c.pedidos + '</td><td class="n">' + pct(c.ok, c.pedidos) + '</td></tr>'; }).join('') +
+        '</tbody></table>' : '<p class="h-vacio">Ningún cliente quedó fuera de ventana en este período.</p>') + '</section></div>';
+    } else if (!hleyendo && !herr) h += '<p class="h-vacio">Tocá <b>Actualizar histórico</b> para ver los datos guardados.</p>';
+    el.innerHTML = h;
+  }
+  $('historico').addEventListener('click', function (ev) {
+    var t = ev.target;
+    if (t.id === 'h-leer') leerHistorico();
+    else if (t.id === 'h-guardar') guardarHistorico();
+    else if (t.id === 'h-url-cambiar') { hcfg.url = ''; guardarCfgHist(); pintarHistorico(); }
+    else if (t.id === 'h-url-ok') {
+      var u = $('h-url').value.trim();
+      if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u)) { herr = 'La dirección tiene que ser la de la aplicación web y terminar en /exec.'; pintarHistorico(); return; }
+      hcfg.url = u; herr = ''; guardarCfgHist(); guardarHistorico();
+    }
+  });
+  $('historico').addEventListener('change', function (ev) {
+    if (ev.target.id === 'h-dias') { hcfg.dias = +ev.target.value; guardarCfgHist(); leerHistorico(); }
+  });
+
   // ---------- eventos ----------
   function alternar(p) { abiertos[p] = !abiertos[p]; pintar(); }
   $('b-todo').addEventListener('click', actualizarTodo);
@@ -733,14 +902,16 @@
 
   // ---------- pestañas: Tablero / Guía instalación extensión ----------
   function mostrarVista() {
-    var guia = location.hash === '#guia';
-    $('main').hidden = guia;
-    $('guia').hidden = !guia;
-    document.body.classList.toggle('ver-guia', guia);
-    $('tab-tablero').classList.toggle('act', !guia);
-    $('tab-guia').classList.toggle('act', guia);
-    $('tab-tablero').setAttribute('aria-selected', String(!guia));
-    $('tab-guia').setAttribute('aria-selected', String(guia));
+    var v = location.hash === '#guia' ? 'guia' : location.hash === '#historico' ? 'historico' : 'tablero';
+    $('main').hidden = v !== 'tablero';
+    $('guia').hidden = v !== 'guia';
+    $('historico').hidden = v !== 'historico';
+    document.body.classList.toggle('ver-guia', v !== 'tablero');
+    ['tablero', 'historico', 'guia'].forEach(function (k) {
+      $('tab-' + k).classList.toggle('act', v === k);
+      $('tab-' + k).setAttribute('aria-selected', String(v === k));
+    });
+    if (v === 'historico') abrirHistorico();
   }
   window.addEventListener('hashchange', function () { mostrarVista(); window.scrollTo(0, 0); });
   mostrarVista();

@@ -104,6 +104,47 @@ async function leerVentanas() {
   }
 }
 
+// Histórico OT: hoja "Histórico OT" (pestañas Camiones y Clientes). Se escribe a través del
+// script publicado en la hoja (aplicación web) y se lee como CSV.
+const HOJA_HISTORICO = '1kqOCYxMQEhT1TWf43lYzvaN4Oc0m-2GKAhoh2IaPC7k';
+const CLAVE_HISTORICO = 'luqrJYc5_XlqKb8ajEBiteGJ';
+async function guardarHistorico(msg) {
+  try {
+    const url = String(msg.url || '');
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) throw new Error('La dirección del script no es válida: tiene que ser la de la aplicación web y terminar en /exec.');
+    const body = JSON.stringify(Object.assign({}, msg.datos || {}, { clave: CLAVE_HISTORICO }));
+    const r = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: body, redirect: 'follow' });
+    const texto = await r.text();
+    let j = null;
+    try { j = JSON.parse(texto); } catch (e) { /* no es JSON */ }
+    if (!j) throw new Error('El script no respondió como se esperaba (' + r.status + '). Revisá que esté publicado con acceso "Cualquier persona".');
+    if (!j.ok) throw new Error(j.error || 'El script rechazó los datos.');
+    return { ok: true, data: Object.assign(j, { at: Date.now() }) };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+async function leerHistorico(msg) {
+  try {
+    const desde = /^\d{4}-\d{2}-\d{2}$/.test(msg.desde || '') ? msg.desde : '2000-01-01';
+    const url = (hoja, q) => 'https://docs.google.com/spreadsheets/d/' + HOJA_HISTORICO + '/gviz/tq?tqx=out:csv&headers=1&sheet=' + encodeURIComponent(hoja) + '&tq=' + encodeURIComponent(q);
+    const leer = async (u) => {
+      const r = await fetch(u, { credentials: 'include', cache: 'no-store' });
+      const t = await r.text();
+      if (!r.ok || /^\s*<(!doctype|html)/i.test(t)) throw new Error('Google no dejó leer la hoja Histórico OT (' + r.status + ').');
+      return t;
+    };
+    const filtro = " where A >= date '" + desde + "'";
+    const [camiones, clientes] = await Promise.all([
+      leer(url('Camiones', 'select A, B, C, F, G, H, I, J, K, L' + filtro)),
+      leer(url('Clientes', 'select A, B, C, D, E, G' + filtro)),
+    ]);
+    return { ok: true, data: { camiones: camiones, clientes: clientes, at: Date.now() } };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
 // Un solo pedido en curso por fuente.
 const enCurso = {};
 function atender(msg) {
@@ -111,6 +152,8 @@ function atender(msg) {
   const clave = msg && msg.tipo;
   if (clave === 'prioridades') return leerPrioridades();
   if (clave === 'ventanas') return leerVentanas();
+  if (clave === 'guardarHistorico') return guardarHistorico(msg);
+  if (clave === 'historico') return leerHistorico(msg);
   if (!FUENTES[clave]) return Promise.resolve({ ok: false, error: 'Pedido desconocido.' });
   if (!enCurso[clave]) {
     enCurso[clave] = leer(clave)

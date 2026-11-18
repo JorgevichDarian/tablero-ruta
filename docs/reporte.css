@@ -231,3 +231,36 @@ button.prio span{font:700 13px/1 var(--cond);background:var(--tinta);color:#fff;
 .ot-aviso{color:var(--tenue);font-size:13px}
 th.h-ot,td.h-ot{min-width:220px}
 @media (max-width:900px){table.cli .h-ot{min-width:170px}}
+
+/* ---------- histórico ---------- */
+.historico-vista{max-width:1480px;margin:0 auto;padding:18px 24px 48px}
+.h-cab{display:flex;justify-content:space-between;align-items:flex-end;gap:12px 24px;flex-wrap:wrap;margin-bottom:12px}
+.h-cab h2{font:700 28px/1.1 var(--cond);margin:0 0 4px}
+.h-cab p{margin:0;color:var(--tinta2);max-width:70ch}
+.h-cab a,.h-setup a{color:var(--azul)}
+.h-ctrl{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.h-ctrl label{display:flex;gap:6px;align-items:center;font-size:14px;color:var(--tinta2)}
+.h-ctrl select,.h-url input{font:inherit;padding:6px 8px;border:1px solid var(--linea);border-radius:5px;background:#fff;color:var(--tinta)}
+.h-ctrl button,.h-url button{font:inherit;font-weight:600;padding:7px 14px;border-radius:6px;border:1px solid var(--noche);background:var(--noche);color:#fff;cursor:pointer}
+.h-ctrl button#h-leer{background:#fff;color:var(--noche)}
+.h-ctrl button:disabled{opacity:.6;cursor:progress}
+.h-msg,.h-estado{color:var(--tinta2);font-size:14px;margin:0 0 12px}
+.h-link{background:none;border:0;padding:0;color:var(--azul);font:inherit;cursor:pointer;text-decoration:underline}
+.h-setup{background:var(--panel);border-radius:8px;padding:16px 20px;margin-bottom:14px;border-left:4px solid var(--azul)}
+.h-setup h3{font:700 20px/1.2 var(--cond);margin:0 0 8px}
+.h-setup ol{margin:0 0 10px;padding-left:22px}.h-setup li{margin:6px 0}
+.h-url{display:flex;gap:8px;flex-wrap:wrap}.h-url input{flex:1;min-width:260px}
+.h-nota{font-size:12.5px;color:var(--tenue);margin:8px 0 0}
+.h-bloque{background:var(--panel);border-radius:8px;padding:14px 18px;margin-bottom:14px;min-width:0}
+.h-bloque h3{font:700 20px/1.2 var(--cond);margin:12px 0 8px}
+.h-kpis{display:flex;gap:10px 36px;flex-wrap:wrap}
+.h-scroll{overflow-x:auto}
+.h-graf{max-width:100%;height:auto;display:block}
+.h-graf .h-grid{stroke:var(--linea2);stroke-width:1}
+.h-graf .h-eje{font:12px var(--ui);fill:var(--tenue)}
+.h-graf .h-val{font:600 11px var(--ui);fill:var(--tinta2)}
+.h-graf .b-ok{fill:var(--verde)}.h-graf .b-med{fill:var(--ambar)}.h-graf .b-mal{fill:var(--rojo)}
+.h-dos{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:14px}
+.h-dos table.cli td{vertical-align:middle}
+.h-vacio{color:var(--tenue);margin:6px 0}
+@media (max-width:1000px){.h-dos{grid-template-columns:1fr}.historico-vista{padding:14px 16px 40px}}
