@@ -264,3 +264,11 @@ th.h-ot,td.h-ot{min-width:220px}
 .h-dos table.cli td{vertical-align:middle}
 .h-vacio{color:var(--tenue);margin:6px 0}
 @media (max-width:1000px){.h-dos{grid-template-columns:1fr}.historico-vista{padding:14px 16px 40px}}
+
+/* ---------- llegada estimada de pendientes ---------- */
+.ot-linea .ot-eta{position:absolute;top:2px;width:14px;height:14px;margin-left:-7px;border-radius:50%;background:#fff;border:2px dashed var(--tenue)}
+.ot-eta.riesgo{border-color:var(--rojo);border-style:solid;background:var(--rojo-f)}
+.ot-eta.justo{border-color:var(--ambar);border-style:solid}
+.ot-eta.antes{border-color:var(--azul)}
+.ot-eta.ok{border-color:var(--verde)}
+.ot-txt.riesgo b{color:#A3291F}.ot-txt.justo b{color:var(--aviso)}.ot-txt.antes b{color:var(--azul)}

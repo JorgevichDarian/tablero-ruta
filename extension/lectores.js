@@ -87,7 +87,8 @@ async function leerNextbyn(opciones) {
   const COLS_HORA = [/(hora|fecha|fh|time).*(entreg|visit|llegad|cumpl|cierre|real)/i, /(entreg|visit|llegad|cumpl).*(hora|fecha|fh|time)/i, /^(hora|fecha)(visita|entrega)?$/i];
 
   function clientes(doc) {
-    const out = { n: 0, p: {}, campos: null, colHora: '' };
+    const out = { n: 0, p: {}, campos: null, colHora: '', colSeq: '' };
+    let pos = 0;
     const txt = (e) => String((e && e.textContent) || '').replace(/\s+/g, ' ').trim();
     function agregar(o) {
       if (!('estadoentrega' in o) && !('nomcli' in o)) return;
@@ -120,7 +121,14 @@ async function leerNextbyn(opciones) {
       }
       // Muestra de columnas (sin teléfonos) para poder diagnosticar desde el reporte.
       if (!out.campos) out.campos = Object.keys(o).map((c) => c + '=' + String(o[c]).replace(/\d{6,}/g, '#').slice(0, 30)).join(' | ');
-      P[id] = { nombre: nombre, domicilio: o.domicli || '', estado: String(o.estadoentrega || '').toUpperCase(), hora: hora };
+      // Secuencia de visita: columna de orden si Nextbyn la trae; si no, el orden de la lista.
+      let seq = null;
+      for (const c of Object.keys(o)) {
+        if (seq == null && /(^|_)(orden|secu|posic|nrovisita|ordenvisita)/i.test(c) && !/compra|pedido|estado/i.test(c) && /^\d{1,4}$/.test(o[c])) { seq = +o[c]; if (!out.colSeq) out.colSeq = c; }
+      }
+      if (seq == null) seq = o.__pos != null ? +o.__pos : pos;
+      pos++;
+      P[id] = { nombre: nombre, domicilio: o.domicli || '', estado: String(o.estadoentrega || '').toUpperCase(), hora: hora, seq: seq };
     }
     // 1) Datos de la grilla (ag-Grid API guardada en alguna variable global de la página)
     try {
@@ -143,6 +151,7 @@ async function leerNextbyn(opciones) {
             if (!d || typeof d !== 'object') return;
             const o = {};
             Object.keys(d).forEach((c) => { const x = d[c]; if (x != null && typeof x !== 'object') o[c.toLowerCase()] = String(x).trim(); });
+            if (nodo.rowIndex != null) o.__pos = nodo.rowIndex;
             agregar(o);
           });
         } catch (e) { /* sigue con la próxima */ }
@@ -157,6 +166,7 @@ async function leerNextbyn(opciones) {
         const k = ((grid && (grid.closest('[id]') || {}).id) || '') + '|' + row.getAttribute('row-id');
         const o = (filas[k] = filas[k] || {});
         row.querySelectorAll('[col-id]').forEach((c) => { o[c.getAttribute('col-id').toLowerCase()] = txt(c); });
+        if (row.getAttribute('row-index') != null) o.__pos = +row.getAttribute('row-index');
       });
       Object.keys(filas).forEach((k) => agregar(filas[k]));
     } catch (e) { /* nada */ }

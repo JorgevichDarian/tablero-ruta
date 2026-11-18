@@ -248,6 +248,7 @@
       c.leidoNextbyn = !!x;
       c.nbEstado = x ? x.estado : '';
       c.horaNb = x && x.hora ? x.hora : null;
+      c.seq = x && x.seq != null ? x.seq : null;
       c.est = c.rechazado ? 'rechazado' : c.parcial ? 'parcial' : c.entregado ? 'entregado' : '';
       var s = x && estadoNextbyn(x.estado);
       if (s === 'rechazado' || s === 'parcial') c.est = s;
@@ -427,7 +428,54 @@
     }
     var am = minDelDia(ahora);
     r.st = !r.sinVentana && am > f[f.length - 1][1] ? 'vencido' : 'pend';
+    var p = proyeccion(pat, ahora).porCli[claveCli(c)];
+    if (p) { r.eta = p.eta; r.riesgo = p.riesgo; r.pos = p.pos; r.minCli = p.m; }
     return r;
+  }
+
+  // ---------- proyección: clientes en riesgo de llegar fuera de ventana ----------
+  // Orden de visita: secuencia de Nextbyn. Tiempo por cliente: promedio de las últimas entregas
+  // de hoy (si hay al menos 3 con hora); si no, el ritmo del camión desde que salió.
+  var cacheProy = {};
+  function claveCli(c) { return c.codigo || c.cliente; }
+  function proyeccion(pat, ahora) {
+    var k = pat + '|' + (nb && nb.at) + '|' + (ch && ch.at) + '|' + (vt && vt.at) + '|' + Math.floor(ahora / 6e4);
+    if (cacheProy[k]) return cacheProy[k];
+    var lista = listaClientes(pat), res = { porCli: {}, riesgo: 0, justo: 0, m: null };
+    var horas = lista.map(function (c) { var h = horaEntrega(pat, c); return h && h.t; }).filter(Boolean).sort(function (a, b) { return a - b; });
+    var m = null;
+    if (horas.length >= 3) { var u = horas.slice(-6); m = (u[u.length - 1] - u[0]) / (u.length - 1) / 6e4; }
+    if (!m || m < 3) {
+      var cam = nb && nb.cams.filter(function (x) { return String(x.patente).toUpperCase() === pat; })[0];
+      m = cam && cam.hechos && cam.inicio ? (ahora - cam.inicio) / 6e4 / cam.hechos : 20;
+    }
+    m = Math.max(5, Math.min(90, m));
+    res.m = m;
+    var pend = lista.filter(function (c) { return !c.est; });
+    pend.sort(function (a, b) {
+      var sa = a.seq == null ? 1e9 : a.seq, sb = b.seq == null ? 1e9 : b.seq;
+      return sa - sb || String(a.cliente).localeCompare(b.cliente);
+    });
+    var ultima = horas.length ? horas[horas.length - 1] : 0;
+    var base = Math.max(ahora.getTime(), ultima + m * 6e4);
+    pend.forEach(function (c, i) {
+      var eta = base + i * m * 6e4, v = vt && vt.mapa && c.codigo ? vt.mapa[c.codigo] : null, f = v ? v.f : [];
+      var dias = Math.floor((new Date(eta).setHours(0, 0, 0, 0) - new Date(ahora).setHours(0, 0, 0, 0)) / 864e5);
+      var em = minDelDia(eta) + dias * 1440, riesgo = 'sin';
+      if (f.length && minDelDia(ahora) > f[f.length - 1][1]) riesgo = 'vencido'; // ya se perdió: no cuenta como riesgo
+      else if (f.length) {
+        var dentro = f.filter(function (x) { return em >= x[0] && em <= x[1]; })[0];
+        if (dentro) riesgo = dentro[1] - em < m ? 'justo' : 'ok';
+        else if (f.some(function (x) { return x[0] > em; })) riesgo = 'antes';
+        else riesgo = 'riesgo';
+      }
+      if (riesgo === 'riesgo') res.riesgo++;
+      if (riesgo === 'justo') res.justo++;
+      res.porCli[claveCli(c)] = { eta: eta, riesgo: riesgo, pos: i + 1, m: m };
+    });
+    if (Object.keys(cacheProy).length > 200) cacheProy = {};
+    cacheProy[k] = res;
+    return res;
   }
   // OT del camión: entregados dentro de la ventana sobre el total de pedidos del día.
   function otDeCamion(pat, ahora) {
@@ -444,7 +492,7 @@
     if (dc) return cruzar(dc, nbCli);
     return Object.keys(nbCli).map(function (id) {
       var x = nbCli[id];
-      return { codigo: id.indexOf('N:') ? id : '', cliente: (id.indexOf('N:') ? id + ' - ' : '') + x.nombre, domicilio: x.domicilio, nbEstado: x.estado, horaNb: x.hora || null, leidoNextbyn: true, est: estadoNextbyn(x.estado) };
+      return { codigo: id.indexOf('N:') ? id : '', cliente: (id.indexOf('N:') ? id + ' - ' : '') + x.nombre, domicilio: x.domicilio, nbEstado: x.estado, horaNb: x.hora || null, seq: x.seq != null ? x.seq : null, leidoNextbyn: true, est: estadoNextbyn(x.estado) };
     });
   }
   function pct(a, b) { return b ? Math.round((a / b) * 100) + '%' : '—'; }
@@ -458,16 +506,29 @@
       h += '<div class="ot-ven" style="left:' + E.x(a) + '%;width:' + Math.max(0.8, E.x(b) - E.x(a)) + '%"></div>';
     });
     if (r.h) h += '<div class="ot-pto ' + r.st + '" style="left:' + E.x(r.h.t) + '%"></div>';
+    if (r.eta && r.st === 'pend') h += '<div class="ot-eta ' + r.riesgo + '" style="left:' + E.x(r.eta) + '%"></div>';
     h += '<div class="ahora" style="left:' + E.x(ahora) + '%"></div></div>';
     var sub = r.f.length ? textoVentana(r.f) : 'Sin ventana';
     if (r.h) sub += (r.h.fuente === 'reporte' ? ', visto entregado ' : ', entregó ') + hhmm(r.h.t);
+    if (r.eta && r.st === 'pend') {
+      var cierre = r.f.length ? hm(r.f[r.f.length - 1][1]) : '';
+      return h + '<span class="ot-txt pend ' + r.riesgo + '"><b>' + TXT_RIESGO[r.riesgo] + '</b> ' + esc(sub) + ', llega ~' + hhmm(r.eta) +
+        (r.riesgo === 'riesgo' ? ' (cierra ' + cierre + ')' : '') + '</span>';
+    }
     return h + '<span class="ot-txt ' + r.st + '"><b>' + TXT_OT[r.st] + (r.temprano ? ' (antes)' : '') + '</b> ' + esc(sub) + '</span>';
   }
+  var TXT_RIESGO = { riesgo: 'En riesgo', justo: 'Justo', antes: 'Llega antes', ok: 'Pendiente', sin: 'Pendiente' };
   function tituloOT(r) {
-    var t = TXT_OT[r.st] + '. Ventana: ' + (r.f.length ? textoVentana(r.f) : 'sin ventana (el OT se da por cumplido)');
+    var t = (r.eta && r.st === 'pend' ? TXT_RIESGO[r.riesgo] + '. Llegada estimada ' + hhmm(r.eta) + ' (' + r.pos + '.º en la secuencia de Nextbyn, ' + Math.round(r.minCli) + ' min por cliente)' : TXT_OT[r.st]) + '. Ventana: ' + (r.f.length ? textoVentana(r.f) : 'sin ventana (el OT se da por cumplido)');
     if (r.h) t += '. Entrega: ' + hhmm(r.h.t) + (r.h.fuente === 'reporte' ? ' (hora en que el reporte vio el cambio)' : r.h.fuente === 'chess' ? ' (liquidación de Chess' + (r.h.prox ? ', a ' + Math.round(r.h.prox) + ' m del cliente' : '') + ')' : ' (Nextbyn)');
     if (r.st === 'sinhora') t += '. Ni la liquidación de Chess ni Nextbyn informan la hora de esta entrega.';
     return t;
+  }
+  function resumenRiesgo(pat, ahora) {
+    var p = proyeccion(pat, ahora);
+    if (!p || (!p.riesgo && !p.justo && !Object.keys(p.porCli).length)) return '';
+    var fuente = nb && nb.cli && nb.cli.colSeq ? 'columna ' + nb.cli.colSeq + ' de Nextbyn' : 'orden de la lista de Clientes de Nextbyn';
+    return '<span class="ot-res" title="' + esc('Secuencia: ' + fuente + '. Tiempo por cliente: ' + Math.round(p.m) + ' min (últimas entregas de hoy o ritmo del camión).') + '">En riesgo <b>' + p.riesgo + '</b> <small>' + (p.justo ? p.justo + ' justos, ' : '') + Math.round(p.m) + ' min por cliente</small></span>';
   }
   function resumenOT(o) {
     return '<span class="ot-res" title="OT en vivo: a tiempo sobre clientes ya visitados (entregados o rechazados; no cuenta los entregados sin hora)">OT en vivo <b>' + pct(o.ok, o.visitados) + '</b> <small>' + o.ok + ' de ' + o.visitados + ' visitados</small></span>' +
@@ -476,11 +537,12 @@
       (o.sinhora ? ', ' + o.sinhora + ' sin hora' : '') + '</small></span>';
   }
 
-  // Rechazos primero, después pendientes y al final los entregados en el orden en que se entregaron.
+  // Rechazos primero, después pendientes (en la secuencia de Nextbyn) y al final los entregados en el orden en que se entregaron.
   function ordenarClientes(pat, lista, ahora) {
     lista.forEach(function (c) { var h = horaEntrega(pat, c); c._t = h ? h.t : Infinity; });
     lista.sort(function (a, b) {
-      return orden(a) - orden(b) || (orden(a) === 2 ? a._t - b._t : 0) || String(a.cliente).localeCompare(b.cliente);
+      var sa = a.seq == null ? 1e9 : a.seq, sb = b.seq == null ? 1e9 : b.seq;
+      return orden(a) - orden(b) || (orden(a) === 2 ? a._t - b._t : 0) || (orden(a) === 1 ? sa - sb : 0) || String(a.cliente).localeCompare(b.cliente);
     });
   }
 
@@ -506,7 +568,7 @@
       if (!ids.length) return '<div class="dres">' + msg + '</div>';
       var lista = listaClientes(pat);
       ordenarClientes(pat, lista, ahora);
-      return '<div class="dres"><span>' + msg + '</span><span>Clientes <b>' + lista.length + '</b></span><span>Entregados <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span>' + resumenOT(otDeCamion(pat, ahora)) + avisoOT() + '</div>' +
+      return '<div class="dres"><span>' + msg + '</span><span>Clientes <b>' + lista.length + '</b></span><span>Entregados <b>' + lista.filter(function (c) { return c.est === 'entregado'; }).length + '</b></span>' + resumenOT(otDeCamion(pat, ahora)) + resumenRiesgo(pat, ahora) + avisoOT() + '</div>' +
         '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-dom">Domicilio</th><th class="h-ot">Ventana y entrega</th></tr></thead><tbody>' +
         lista.map(function (c) { var r = evaluarOT(pat, c, ahora); return '<tr><td>' + pillEstado(c) + '</td><td><b>' + esc(c.cliente) + '</b>' + notaVentana(r) + '</td><td class="h-dom">' + esc(c.domicilio) + '</td><td class="h-ot">' + lineaCliente(r, E, ahora) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     }
@@ -521,7 +583,7 @@
       '<span>Clientes <b>' + cs.length + '</b></span><span>Entregados <b>' + nEnt + '</b></span>' + (nRe ? '<span>Rechazos <b>' + nRe + '</b></span>' : '') +
       '<span>Importe <b>' + plata(dc.importe) + '</b></span><span>Bultos <b>' + Math.round(dc.bultos) + '</b></span>' +
       '<span>Cajones retornables <b>' + Math.round(dc.cajones) + '</b></span>' +
-      (hayNb ? '' : '<span>Sin estados de Nextbyn: el estado sale de Chess.</span>') + resumenOT(otDeCamion(pat, ahora)) + avisoOT() + '</div>' +
+      (hayNb ? '' : '<span>Sin estados de Nextbyn: el estado sale de Chess.</span>') + resumenOT(otDeCamion(pat, ahora)) + resumenRiesgo(pat, ahora) + avisoOT() + '</div>' +
       '<div class="tabla-cli"><table class="cli"><thead><tr><th>Estado</th><th>Cliente</th><th class="h-ot">Ventana y entrega</th><th class="h-dom">Domicilio</th><th class="h-loc">Localidad</th><th class="h-comp">Comprobante</th><th class="n">Importe</th><th class="n">Bultos</th><th class="n">Cajones</th></tr></thead><tbody>';
     cs.forEach(function (c) {
       var k = pat + '|' + c.cliente, abierto = !!clientesAbiertos[k], rOT = evaluarOT(pat, c, ahora);
@@ -574,6 +636,14 @@
 
     var ahora = new Date();
     var cams = analizar(nb.cams, ahora);
+    var riesgoF = 0;
+    cams.forEach(function (e) {
+      if (e.estado !== 'ABIERTA' || !e.pendientes) return;
+      var p = proyeccion(String(e.patente).toUpperCase(), ahora);
+      e.enRiesgo = p.riesgo;
+      riesgoF += p.riesgo;
+      if (p.riesgo) e.alertas.push(p.riesgo + (p.riesgo === 1 ? ' cliente en riesgo' : ' clientes en riesgo') + ' de llegar fuera de ventana');
+    });
     var E = escala(cams, ahora);
     var cuenta = { rojo: 0, amarillo: 0, azul: 0, verde: 0, gris: 0 }, tot = { h: 0, r: 0, t: 0 };
     cams.forEach(function (e) { cuenta[e.sem]++; tot.h += e.hechos; tot.r += e.rechazos; tot.t += e.total; });
@@ -598,6 +668,7 @@
       '<div class="cifra"><b>' + (tot.t ? Math.round((tot.h / tot.t) * 100) : 0) + '%</b><span>avance general</span></div>' +
       '<div class="cifra" title="A tiempo sobre clientes ya visitados (entregados o rechazados)"><b>' + pct(otF.ok, otF.vis) + '</b><span>OT en vivo, ' + otF.ok + ' de ' + otF.vis + ' visitados</span></div>' +
       '<div class="cifra" title="Pedidos entregados dentro de su ventana horaria sobre el total de pedidos del día (clientes sin ventana: cumplido al entregar)"><b>' + pct(otF.ok, otF.total) + '</b><span>OT del día, sobre ' + otF.total + ' pedidos</span></div>' +
+      '<div class="cifra' + (riesgoF ? ' mal' : '') + '" title="Pendientes que, con el ritmo actual y la secuencia de Nextbyn, llegarían después de que cierre su ventana"><b>' + riesgoF + '</b><span>clientes en riesgo</span></div>' +
       '<div class="cifra' + (tot.r ? ' mal' : '') + '"><b>' + tot.r + '</b><span>rechazos</span></div>' +
       '</div></section>';
 

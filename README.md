@@ -22,6 +22,10 @@ OT = pedidos entregados dentro de su ventana horaria ÷ total de pedidos del dí
 
 La hora de entrega sale de la liquidación de Chess de cada camión (`liquidacion/planillasPendientes` para encontrar la jornada abierta y `liquidacion/estadoLiquidacion` para los comprobantes, campo `fhvisita`); es la misma consulta que hace la pantalla "Ver liquidación". Si no está, se toma de Nextbyn cuando la grilla de Clientes la trae, y si tampoco, el reporte registra la hora en que vio al cliente pasar de pendiente a entregado; los clientes que ya figuraban entregados al abrir el reporte quedan "sin hora".
 
+## Clientes en riesgo
+
+Para cada pendiente se estima la llegada: los pendientes se ordenan por la secuencia de Nextbyn (columna de orden de la grilla de Clientes si existe; si no, el orden de la lista) y se les suma, uno tras otro, el tiempo por cliente del camión (promedio de las últimas 6 entregas de hoy con hora; si hay menos de 3, el ritmo desde el inicio de la jornada; entre 5 y 90 minutos). La primera llegada es la más tardía entre "ahora" y "última entrega + tiempo por cliente". Si la llegada estimada cae después del cierre de la ventana, el cliente queda **En riesgo**; con menos de un cliente de margen, **Justo**; antes de que abra, **Llega antes**.
+
 ## Histórico de OT
 
 La pestaña **Histórico** del reporte guarda y muestra el OT de cada día. Los datos quedan en la hoja [Histórico OT](https://docs.google.com/spreadsheets/d/1kqOCYxMQEhT1TWf43lYzvaN4Oc0m-2GKAhoh2IaPC7k/edit) (pestañas Flota, Camiones y Clientes).
