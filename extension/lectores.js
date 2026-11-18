@@ -225,6 +225,89 @@ async function leerChess() {
   const haceDias = (n) => dia(new Date(hoy.getFullYear(), hoy.getMonth(), hoy.getDate() - n));
   const esRetornable = (cod) => /(^|[\s\d*])RET(\b|\d)/i.test(cod || '') && !/\bKEG\b/i.test(cod || '');
 
+  // Usuario de Chess (la pantalla de liquidaciones lo manda en pcusr).
+  function usuarioChess() {
+    const stores = [];
+    try { stores.push(localStorage); } catch (e) { /* nada */ }
+    try { stores.push(sessionStorage); } catch (e) { /* nada */ }
+    for (const st of stores) {
+      for (let i = 0; i < st.length; i++) {
+        const k = st.key(i), v = st.getItem(k) || '';
+        if (/^(usuario|user|username|login|cusuario)$/i.test(k) && /^[\w.@-]{3,40}$/.test(v)) return v;
+        if (v.length < 20000 && /^[{[]/.test(v)) {
+          const m = /"(?:usuario|user|username|login|cusuario|nombreUsuario)"\s*:\s*"([\w.@-]{3,40})"/i.exec(v);
+          if (m) return m[1];
+        }
+      }
+    }
+    // Último recurso: el nombre de usuario que muestra el encabezado de Chess (una palabra en minúsculas).
+    try {
+      const cand = Array.from(document.querySelectorAll('[class*=user] *, [class*=usuario] *, header *, nav *'))
+        .filter((e) => !e.children.length).map((e) => (e.textContent || '').trim())
+        .filter((t) => /^[a-z][a-z0-9._-]{2,30}$/.test(t));
+      if (cand.length) return cand[0];
+    } catch (e) { /* nada */ }
+    return '';
+  }
+  function fechaHora(v) {
+    const m = /\/Date\((\d{10,13})/.exec(String(v || ''));
+    if (m) return +m[1];
+    const t = v ? new Date(v).getTime() : NaN;
+    return isNaN(t) ? null : t;
+  }
+
+  async function horasDeLiquidacion(porPatente) {
+    const fechaHoy = dia(new Date());
+    const usuario = usuarioChess();
+    const out = { ok: 0, camiones: 0, error: '' };
+    const pats = Object.keys(porPatente);
+    async function unCamion(pat) {
+      const cam = porPatente[pat];
+      const idresp = (/^\s*(\d+)\s*-/.exec(cam.transporte || '') || [])[1];
+      if (!idresp) return;
+      const r = await fetch(base + '/web/api/liquidacion/planillasPendientes?pcusr=' + encodeURIComponent(usuario) + '&pdtfec=&pirep=' + idresp + '&pctiporesp=TRN', { credentials: 'include' });
+      if (!r.ok) throw new Error('planillasPendientes ' + r.status);
+      const j = await r.json();
+      const jornadas = ((j && j.dsPlaPdtes && j.dsPlaPdtes.ttPlaPdtes) || []).filter((x) =>
+        x.tipomov === 'JOR' && (x.jornadacerrada === false || String(x.fhinijornada || '').slice(0, 10) === fechaHoy));
+      if (!jornadas.length) return;
+      const r2 = await fetch(base + '/web/api/liquidacion/estadoLiquidacion', {
+        method: 'POST', credentials: 'include', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttplanis: jornadas.map((x) => ({ nromov: x.nromov, seriemov: x.seriemov || 0, tipomov: 'JOR' })) }),
+      });
+      if (!r2.ok) throw new Error('estadoLiquidacion ' + r2.status);
+      const j2 = await r2.json();
+      const cbtes = (j2 && j2.dsLiquidacion && j2.dsLiquidacion.ttCbtes) || [];
+      const porCli = {};
+      cbtes.forEach((c) => {
+        if (c.anulado || !c.idcliente) return;
+        const k = String(c.idcliente);
+        const o = (porCli[k] = porCli[k] || { estados: [], hora: null, prox: null });
+        const est = String(c.estado || '').trim().toUpperCase();
+        if (est && est !== '-' && o.estados.indexOf(est) < 0) o.estados.push(est);
+        const t = fechaHora(c.fhvisita);
+        if (t && (o.hora == null || t < o.hora)) { o.hora = t; o.prox = c.proximidad; }
+      });
+      cam.clientes.forEach((cl) => {
+        const cod = (/^\s*(\d+)/.exec(cl.cliente) || [])[1];
+        const x = cod && porCli[cod];
+        if (!x) return;
+        cl.horaChess = x.hora;
+        cl.estadoLiq = x.estados.join(' / ');
+        cl.proximidad = x.prox;
+      });
+      cam.jornadaLiq = jornadas.map((x) => x.nromov);
+      out.camiones++;
+    }
+    // De a 4 camiones a la vez.
+    for (let i = 0; i < pats.length; i += 4) {
+      const res = await Promise.allSettled(pats.slice(i, i + 4).map(unCamion));
+      res.forEach((r) => { if (r.status === 'rejected' && !out.error) out.error = String((r.reason && r.reason.message) || r.reason); });
+    }
+    out.ok = out.camiones;
+    return out;
+  }
+
   async function reporte(fecha) {
     const r = await fetch(base + '/web/api/reporteRepartos/obtenerReporte?piDep=1&pdtDes=' + fecha + '&pdtHas=' + fecha + '&pctipo=D', { credentials: 'include' });
     if (!r.ok) throw new Error('Chess respondió ' + r.status + '. ¿Venció la sesión de Chess? Entrá con tu usuario y volvé a tocar Actualizar.');
@@ -281,7 +364,10 @@ async function leerChess() {
         return c;
       });
     });
-    return { data: porPatente, at: Date.now() };
+    // Hora real de entrega: liquidación de cada camión (pantalla "Ver liquidación").
+    let liq = { ok: 0, error: '' };
+    try { liq = await horasDeLiquidacion(porPatente); } catch (e) { liq.error = String((e && e.message) || e); }
+    return { data: porPatente, at: Date.now(), liq: liq };
   } catch (e) {
     return { error: String((e && e.message) || e) };
   }

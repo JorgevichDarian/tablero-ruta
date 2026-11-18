@@ -20,7 +20,7 @@ Cada camión en ruta tiene el botón **Prioridad pedidos pendientes**. Al pasar 
 
 OT = pedidos entregados dentro de su ventana horaria ÷ total de pedidos del día. La ventana de cada cliente sale de la columna `Horario Ent.` (BO) de la hoja *Tablero-de-ruta_Clientes-actualizado*, con formato `hh:mm a hh:mm; hh:mm a hh:mm`. Los clientes sin ventana o con una nota en lugar de horario ("AVISAR", "LLAMAR ANTES") cuentan como a tiempo al entregarse; la nota se muestra en gris debajo del cliente.
 
-La hora de entrega se toma de Nextbyn si la grilla de Clientes la trae (columna de fecha/hora de visita). Si no, el reporte registra la hora en que vio al cliente pasar de pendiente a entregado; los clientes que ya figuraban entregados al abrir el reporte quedan "sin hora".
+La hora de entrega sale de la liquidación de Chess de cada camión (`liquidacion/planillasPendientes` para encontrar la jornada abierta y `liquidacion/estadoLiquidacion` para los comprobantes, campo `fhvisita`); es la misma consulta que hace la pantalla "Ver liquidación". Si no está, se toma de Nextbyn cuando la grilla de Clientes la trae, y si tampoco, el reporte registra la hora en que vio al cliente pasar de pendiente a entregado; los clientes que ya figuraban entregados al abrir el reporte quedan "sin hora".
 
 ## Horarios de referencia
 

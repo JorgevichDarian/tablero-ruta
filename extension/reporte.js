@@ -251,6 +251,11 @@
       var s = x && estadoNextbyn(x.estado);
       if (s === 'rechazado' || s === 'parcial') c.est = s;
       else if (s === 'entregado' && !c.est) c.est = 'entregado';
+      // Sin dato de Nextbyn: estado de la liquidación de Chess (ENTREGADO, ENTREGA PARCIAL, NO VISITADO).
+      if (!s && !c.est && c.estadoLiq) {
+        if (/RECHAZ/.test(c.estadoLiq)) c.est = 'rechazado';
+        else if (/ENTREGA/.test(c.estadoLiq)) c.est = 'entregado';
+      }
       return c;
     });
   }
@@ -396,6 +401,7 @@
     guardarLS(CLAVE_OBS, obs);
   }
   function horaEntrega(pat, c) {
+    if (c.horaChess) return { t: c.horaChess, fuente: 'chess', prox: c.proximidad };
     if (c.horaNb) return { t: c.horaNb, fuente: 'nextbyn' };
     var obs = leerLS(CLAVE_OBS, {});
     var o = obs.dia === new Date().toDateString() && obs.c && obs.c[pat + '|' + (c.codigo || '')];
@@ -456,8 +462,8 @@
   }
   function tituloOT(r) {
     var t = TXT_OT[r.st] + '. Ventana: ' + (r.f.length ? textoVentana(r.f) : 'sin ventana (el OT se da por cumplido)');
-    if (r.h) t += '. Entrega: ' + hhmm(r.h.t) + (r.h.fuente === 'reporte' ? ' (hora en que el reporte vio el cambio; Nextbyn no informa la hora)' : ' (Nextbyn)');
-    if (r.st === 'sinhora') t += '. El cliente ya figuraba entregado cuando se abrió el reporte y Nextbyn no informa la hora.';
+    if (r.h) t += '. Entrega: ' + hhmm(r.h.t) + (r.h.fuente === 'reporte' ? ' (hora en que el reporte vio el cambio)' : r.h.fuente === 'chess' ? ' (liquidación de Chess' + (r.h.prox ? ', a ' + Math.round(r.h.prox) + ' m del cliente' : '') + ')' : ' (Nextbyn)');
+    if (r.st === 'sinhora') t += '. Ni la liquidación de Chess ni Nextbyn informan la hora de esta entrega.';
     return t;
   }
   function resumenOT(o) {
@@ -469,7 +475,9 @@
   function notaVentana(r) { return r.nota ? '<span class="ot-nota" title="Sin ventana horaria: el OT se da por cumplido">⚠ ' + esc(r.nota) + '</span>' : ''; }
   function avisoOT() {
     if (!vt) return '<span class="ot-aviso">' + (errVt ? 'No se pudo leer la hoja de ventanas: ' + esc(errVt) : 'Leyendo ventanas horarias…') + '</span>';
-    if (nb && nb.cli && nb.cli.n && !nb.cli.colHora) return '<span class="ot-aviso" title="' + esc('Columnas de Nextbyn: ' + (nb.cli.campos || 'sin datos')) + '">Nextbyn no informa la hora de entrega: se usa la hora en que el reporte vio cada cambio.</span>';
+    if (ch && ch.liq && ch.liq.camiones) return ch.liq.error ? '<span class="ot-aviso" title="' + esc(ch.liq.error) + '">Algunas liquidaciones de Chess no se pudieron leer.</span>' : '';
+    if (ch && ch.liq && ch.liq.error) return '<span class="ot-aviso" title="' + esc(ch.liq.error) + '">No se pudo leer la liquidación de Chess: la hora de entrega sale de Nextbyn o de cuándo el reporte vio el cambio.</span>';
+    if (!ch) return '<span class="ot-aviso">La hora de entrega sale de la liquidación de Chess: tocá Chess arriba.</span>';
     return '';
   }
 
