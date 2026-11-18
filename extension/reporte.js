@@ -28,6 +28,7 @@
   function chapa(p) { return '<span class="chapa"><span>' + esc(p) + '</span></span>'; }
 
   // ---------- configuración ----------
+  var CLAVE_AL = 'ltReporteAlertas', alAbierto = !!leerLS(CLAVE_AL, false); // panel de alertas: minimizado por defecto
   var cfg = Object.assign({ objLV: '15:00', objSab: '13:00', sinAvance: 45 }, leerLS(CLAVE_CFG, {}));
   function objetivo(d) { return sabado(d) ? cfg.objSab : cfg.objLV; }
   function ventanaApertura(d) { return sabado(d) ? ['08:00', '08:30'] : ['07:30', '08:00']; }
@@ -742,7 +743,7 @@
       '</section>';
 
     // Rutas con su línea del día
-    h += '<div class="layout"><section class="rutas" aria-label="Rutas de hoy"><div class="eje"><span>Camión</span><span>Estado</span>' + eje(E, ahora) +
+    h += '<div class="layout' + (alAbierto ? '' : ' al-min') + '"><section class="rutas" aria-label="Rutas de hoy"><div class="eje"><span>Camión</span><span>Estado</span>' + eje(E, ahora) +
       '<span class="n">Clientes</span><span class="n">Ritmo</span><span class="n">Fin est.</span></div>';
     cams.forEach(function (e) {
       var abierto = !!abiertos[e.patente];
@@ -768,8 +769,10 @@
     // Columna de alertas, agrupadas por camión
     var conAlertas = cams.filter(function (e) { return e.alertas.length; });
     var nAl = conAlertas.reduce(function (s, e) { return s + e.alertas.length; }, 0);
-    h += '<aside class="alertas"><h2>Alertas <small>' + nAl + '</small></h2>' +
-      (conAlertas.length ? '<ul>' + conAlertas.map(function (e) {
+    var alRojo = conAlertas.some(function (e) { return e.sem === 'rojo'; });
+    h += '<aside class="alertas' + (alAbierto ? '' : ' min') + '"><button type="button" class="al-tog" aria-expanded="' + alAbierto + '" title="' + (alAbierto ? 'Minimizar alertas' : 'Ver alertas') + '">' +
+      '<span class="al-tit">Alertas</span><span class="al-n' + (nAl ? (alRojo ? ' rojo' : ' hay') : '') + '">' + nAl + '</span><span class="al-fl" aria-hidden="true">' + (alAbierto ? '›' : '‹') + '</span></button>' +
+      (!alAbierto ? '' : conAlertas.length ? '<ul>' + conAlertas.map(function (e) {
         return '<li data-ir="' + esc(e.patente) + '" style="--c:' + COLOR[e.sem] + '">' + chapa(e.patente) + '<div>' + e.alertas.map(function (a) { return '<p>' + esc(a) + '</p>'; }).join('') + '</div></li>';
       }).join('') + '</ul>' : '<p class="sinalertas">Sin alertas por ahora.</p>') + '</aside></div>';
 
@@ -1016,6 +1019,7 @@
     }
     var cl = ev.target.closest('tr.cl');
     if (cl) { var k = cl.getAttribute('data-cl'); clientesAbiertos[k] = !clientesAbiertos[k]; pintar(); return; }
+    if (ev.target.closest('button.al-tog')) { alAbierto = !alAbierto; guardarLS(CLAVE_AL, alAbierto); pintar(); return; }
     var ir = ev.target.closest('li[data-ir]');
     if (ir) {
       var p0 = ir.getAttribute('data-ir');

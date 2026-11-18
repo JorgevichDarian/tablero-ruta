@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Tablero de ruta · Logística Total",
   "short_name": "Tablero de ruta",
-  "version": "1.7.4",
+  "version": "1.7.5",
   "description": "Trae los datos de Nextbyn y Chess para el reporte externo del Tablero de ruta.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA8zbspR/qIgdITIsUO2XPN8fyOj6JyzWWhYjBotJD33qPlrlOCG0kMcQr+xUJVtpwaDSDZ0l1t69Gwmqsg4U36Uj2XxyvqW+BXOTj24F3XKSteAdgiIXv7dA6vOcqn5DfvgRJYcEqA/FKzMXonIaCDygBa9aurnhqgqylDDp2pZmNRr5WmbWeQgo2U4Ny6TQn+jRGsr5Sd9cT/DrmlRbicrX7RGCTih7Iq2O5kPRi34eUf0RR4TBEMTDUyIBSPWXdCb6n2xf4ZBHBmc+31d8q+Tke+V0ApBOltNU7cjE+UbkEz+0PwlA6zzJ1sn0NZ2eVl/o22uWGJxew1/fv6+b+2QIDAQAB",
   "permissions": ["scripting"],
