@@ -14,6 +14,7 @@ fs.copyFileSync(path.join(ext, 'reporte.html'), path.join(docs, 'index.html'));
 fs.copyFileSync(path.join(ext, 'reporte.js'), path.join(docs, 'reporte.js'));
 fs.copyFileSync(path.join(ext, 'reporte.css'), path.join(docs, 'reporte.css'));
 fs.copyFileSync(path.join(ext, 'icono128.png'), path.join(docs, 'icono.png'));
+fs.copyFileSync(path.join(ext, 'logo-lt.png'), path.join(docs, 'logo-lt.png'));
 fs.copyFileSync(path.join(__dirname, 'guia.html'), path.join(docs, 'guia.html'));
 
 // Ícono de la pestaña en la versión publicada.
