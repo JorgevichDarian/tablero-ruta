@@ -22,7 +22,12 @@ fs.copyFileSync(path.join(__dirname, 'guia.html'), path.join(docs, 'guia.html'))
 
 // Ícono de la pestaña en la versión publicada.
 const idx = path.join(docs, 'index.html');
-fs.writeFileSync(idx, fs.readFileSync(idx, 'utf8').replace('</title>', '</title>\n<link rel="icon" href="icono.png">'));
+// Cada archivo lleva la versión en la dirección (?v=…), así el navegador no usa una copia vieja
+// guardada en caché (GitHub Pages deja guardar los archivos hasta 10 minutos).
+const version = JSON.parse(fs.readFileSync(path.join(ext, 'manifest.json'), 'utf8')).version;
+fs.writeFileSync(idx, fs.readFileSync(idx, 'utf8')
+  .replace('</title>', '</title>\n<link rel="icon" href="icono.png">')
+  .replace(/(src|href)="((?:vendor\/leaflet\/)?[\w-]+\.(?:js|css))"/g, '$1="$2?v=' + version + '"'));
 
 // Zip de la extensión para descargar desde la guía.
 const zip = path.join(docs, 'tablero-ruta-extension.zip');
