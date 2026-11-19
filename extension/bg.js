@@ -100,6 +100,19 @@ async function leerPrioridades() {
 // Ventanas horarias de entrega: hoja "Tablero-de-ruta_Clientes-actualizado", columnas
 // D (Cliente), F (Razón social) y BO (Horario Ent., formato "hh:mm a hh:mm; hh:mm a hh:mm").
 const HOJA_VENTANAS = 'https://docs.google.com/spreadsheets/d/1o6Y0is6NK0BTW0z4Gj5coFKQ_3SFc9ZYArQYoaERDio/gviz/tq?tqx=out:csv&headers=1&sheet=' + encodeURIComponent('Hoja 1') + '&tq=' + encodeURIComponent('select D, F, BO, W, CA');
+// Seguimiento de clientes suspendidos (Google Sheets, pestaña "Clientes Suspendidos": cliente, inicio, fin, motivo).
+const HOJA_SUSPENDIDOS = 'https://docs.google.com/spreadsheets/d/1FBrsS_SAlZC3_GpuWe7L4KoFeaeATls4-BRujjoXSG0/gviz/tq?tqx=out:csv&headers=1&sheet=' + encodeURIComponent('Clientes Suspendidos') + '&tq=' + encodeURIComponent('select A, B, C, D');
+async function leerSuspendidos() {
+  try {
+    const r = await fetch(HOJA_SUSPENDIDOS, { credentials: 'include', cache: 'no-store' });
+    const texto = await r.text();
+    if (!r.ok || /^\s*<(!doctype|html)/i.test(texto)) throw new Error('Google no dejó leer la planilla de clientes suspendidos (' + r.status + '). Revisá que esté compartida con tu usuario.');
+    return { ok: true, data: { csv: texto, at: Date.now() } };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
 async function leerVentanas() {
   try {
     const r = await fetch(HOJA_VENTANAS, { credentials: 'include', cache: 'no-store' });
@@ -190,6 +203,7 @@ function atender(msg) {
   const clave = msg && msg.tipo;
   if (clave === 'prioridades') return leerPrioridades();
   if (clave === 'ventanas') return leerVentanas();
+  if (clave === 'suspendidos') return leerSuspendidos();
   if (clave === 'guardarHistorico') return guardarHistorico(msg);
   if (clave === 'historico') return leerHistorico(msg);
   if (clave === 'baseClientes') {

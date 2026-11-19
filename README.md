@@ -38,6 +38,10 @@ La pestaña **Histórico** del reporte guarda y muestra el OT de cada día. Los 
 
 Una vez por día (la primera lectura de Chess desde las 6:00) la extensión pide a Chess la misma exportación que Ventas → Clientes → Exportar con el filtro ACTIVOS (`/web/api/clientes/exportarClientes`), descarga el .xlsx con la sesión del usuario y lo abre en la pestaña de Chess. `extension/base-clientes.js` deja la fila de títulos y los datos, estandariza "Horario Ent." (mismas reglas que la carga a mano) y pone 07:30 a 11:00 a las cadenas. El script de la hoja (`apps-script/Codigo.gs`, acción `clientes`) reemplaza "Hoja 1" de Tablero-de-ruta_Clientes-actualizado. Si Chess cambia las columnas D, F, W, BO o CA, o trae menos de 500 clientes, no se toca la hoja. El botón **Base clientes** muestra el estado y fuerza una actualización.
 
+## Clientes suspendidos
+
+Pestaña que lee la planilla "Seguimiento_Clientes_Suspendidos" (Google Sheets, pestaña "Clientes Suspendidos": cliente, inicio, fin, motivo) a través de la extensión (`suspendidos.js`). Escala: 7, 14, 20 días y bloqueo indefinido; el escalón sale solo de la cantidad de suspensiones registradas y no vencen.
+
 ## Horarios de referencia
 
 | | Apertura de ruta | Fin de jornada |
