@@ -1098,29 +1098,18 @@
 
   // ---------- pestañas: Tablero / Guía instalación extensión ----------
   function mostrarVista() {
-    var h = location.hash.split('/')[0];
-    var v = h === '#guia' ? 'guia' : h === '#historico' ? 'historico' : h === '#suspendidos' ? 'suspendidos' : 'tablero';
+    var v = location.hash === '#guia' ? 'guia' : location.hash === '#historico' ? 'historico' : 'tablero';
     $('main').hidden = v !== 'tablero';
     $('guia').hidden = v !== 'guia';
     $('historico').hidden = v !== 'historico';
-    $('suspendidos').hidden = v !== 'suspendidos';
     document.body.classList.toggle('ver-guia', v !== 'tablero');
-    ['tablero', 'suspendidos', 'historico', 'guia'].forEach(function (k) {
+    ['tablero', 'historico', 'guia'].forEach(function (k) {
       $('tab-' + k).classList.toggle('act', v === k);
       $('tab-' + k).setAttribute('aria-selected', String(v === k));
     });
     if (v === 'historico') abrirHistorico();
-    if (v === 'suspendidos' && window.LTSuspendidos) window.LTSuspendidos.abrir();
   }
-  // Para la sección de clientes suspendidos (suspendidos.js).
-  window.LTReporte = { pedir: pedir, leerCSV: leerCSV, esc: esc };
-  var vistaAnt = '';
-  window.addEventListener('hashchange', function () {
-    var h = location.hash.split('/')[0];
-    mostrarVista();
-    if (h !== vistaAnt) window.scrollTo(0, 0);
-    vistaAnt = h;
-  });
+  window.addEventListener('hashchange', function () { mostrarVista(); window.scrollTo(0, 0); });
   mostrarVista();
 
   $('b-base').addEventListener('click', function () { actualizarBase(true); });

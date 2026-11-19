@@ -16,7 +16,7 @@
     <div>
     <span class="empresa">Logística Total SRL</span>
     <h1>Tablero de ruta</h1>
-    <p class="donde"><span id="hoy">CD Neuquén</span> <span class="ver">v1.9.0</span></p>
+    <p class="donde"><span id="hoy">CD Neuquén</span> <span class="ver">v1.9.1</span></p>
     </div>
   </div>
   <div class="fuentes" aria-label="Fuentes de datos">
@@ -27,7 +27,6 @@
 </header>
 <nav class="tabs" role="tablist">
   <a href="#tablero" id="tab-tablero" role="tab">Tablero</a>
-  <a href="#suspendidos" id="tab-suspendidos" role="tab">Clientes suspendidos</a>
   <a href="#historico" id="tab-historico" role="tab">Histórico</a>
   <a href="#guia" id="tab-guia" role="tab">Guía instalación extensión</a>
   <div class="ajustes">
@@ -46,7 +45,6 @@
   </div>
   <div id="contenido"></div>
 </main>
-<section id="suspendidos" class="sp-vista" hidden></section>
 <section id="historico" class="historico-vista" hidden></section>
 <section id="guia" class="guia-vista" hidden>
 <h2 class="gt">Guía de instalación de la extensión</h2>
@@ -77,7 +75,6 @@
 <li><b>OT (entregas a tiempo)</b>: al abrir un camión, cada cliente muestra su ventana horaria (franja celeste) y la hora en que se entregó (punto verde si fue dentro de la ventana, rojo si fue fuera). Las ventanas salen de la columna "Horario Ent." de la hoja de clientes. La hora de entrega sale de la liquidación de cada camión en Chess (la misma que se ve en "Ver liquidación", columna Hora entrega). Los clientes sin ventana o con una nota en lugar de horario (por ejemplo "AVISAR") cuentan como a tiempo al entregarse. Se muestran dos números: <b>OT en vivo</b> (a tiempo sobre clientes ya visitados, entregados o rechazados) y <b>OT del día</b> (a tiempo sobre el total de pedidos del día). Los entregados aparecen al final de la lista, en el orden en que se entregaron.</li>
 <li><b>Clientes en riesgo</b>: para cada pendiente, el reporte estima la hora de llegada siguiendo la secuencia de visitas de Nextbyn y el tiempo por cliente del camión (promedio de las últimas entregas de hoy, o el ritmo desde que salió). Si la llegada estimada cae después de que cierra su ventana, el cliente aparece <b>En riesgo</b>; si llega con menos de un cliente de margen, <b>Justo</b>; si llega antes de que abra, <b>Llega antes</b>. En la línea del cliente, el círculo sin relleno marca la llegada estimada.</li>
 <li><b>Histórico</b>: la pestaña Histórico muestra el OT diario de la flota, el OT por camión y los clientes que más veces quedan fuera de ventana. La primera vez hay que configurar el guardado siguiendo los pasos de esa pestaña; después el reporte guarda solo mientras está abierto.</li>
-<li><b>Clientes suspendidos</b>: la pestaña muestra la escalera de sanciones (7, 14 y 20 días, y bloqueo indefinido en la 4.ª), el historial de cada cliente con lo que le corresponde si reincide, el registro completo y las observaciones sobre los datos. Lee la planilla Seguimiento_Clientes_Suspendidos con tu usuario de Google; se vuelve a leer al abrir la pestaña si pasaron más de 5 minutos, o con el botón Actualizar.</li>
 <li><b>Base de clientes</b>: una vez por día, la primera vez que el reporte lee Chess desde las 6:00, la extensión exporta de Chess la base de clientes activos (lo mismo que Ventas → Clientes → Exportar, filtro ACTIVOS), estandariza "Horario Ent.", les pone 07:30 a 11:00 a las cadenas y reemplaza la hoja de clientes. Si otra PC ya la actualizó ese día, no la vuelve a bajar. El botón <b>Base clientes</b> (arriba a la derecha) muestra cuándo se actualizó y la baja de nuevo si lo tocás. Usa el mismo script de la hoja que el Histórico.</li>
 <li><b>Pago pendiente</b>: en la lista de clientes, <b>Autorizado</b> si el cliente tiene "AUTORIZADO" en la columna Comentario de la hoja de clientes o es cuenta corriente (columna Descripción Sub-línea); si no, <b>No autorizado</b>.</li>
 <li><b>Prioridad pedidos pendientes</b>: pasá el mouse por el botón de cada camión (o tocalo en el celular) para ver sus pedidos pendientes en orden de prioridad. El orden sale de la pestaña <b>PL4.2 Carga ruteo</b> del Plan de agrupación de clientes: primero Ganador (P1), después Básico (P2), En crecimiento (P3) y Ventas bajas (P4); dentro de cada prioridad, primero el de mayor importe. Los clientes que no están en la hoja van al final.</li>
@@ -108,6 +105,5 @@
 </ul></div>
 </section>
 <script src="reporte.js"></script>
-<script src="suspendidos.js"></script>
 </body>
 </html>
