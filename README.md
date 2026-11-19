@@ -40,7 +40,7 @@ Una vez por día (la primera lectura de Chess desde las 6:00) la extensión pide
 
 ## Ver en mapa
 
-Pestaña con un marcador por cliente del día (`extension/mapa.js`): color por ruta, pin con el número de orden de visita para los pendientes (borde rojo si están en riesgo), ✓ para entregados y ✕ para rechazados. La ubicación sale de las columnas T (Longitud) y U (Latitud) de la base de clientes. El mapa usa Leaflet 1.9.4 (BSD-2, en `extension/vendor/leaflet`, compilado del código fuente oficial) con el fondo CARTO Voyager (datos de OpenStreetMap; si no carga, Esri). Los servidores de OpenStreetMap bloquean los pedidos desde la extensión (403).
+Pestaña con un marcador por cliente del día (`extension/mapa.js`): color por ruta, pin con el número de orden de visita para los pendientes (borde rojo si están en riesgo), ✓ para entregados y ✕ para rechazados. La ubicación sale de las columnas T (Longitud) y U (Latitud) de la base de clientes. El mapa usa Leaflet 1.9.4 (BSD-2, en `extension/vendor/leaflet`, compilado del código fuente oficial) con el mapa estándar de OpenStreetMap. Los servidores de mapas gratuitos bloquean los pedidos que salen de una página interna de la extensión; por eso el ícono abre la versión web (GitHub Pages) y la página interna muestra el mapa sin calles con un enlace a la web.
 
 ## Horarios de referencia
 

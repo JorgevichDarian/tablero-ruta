@@ -224,6 +224,9 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, responder) => {
   return true;
 });
 
+// El ícono abre la versión web del reporte (GitHub Pages). Los servidores de mapas gratuitos
+// no atienden los pedidos que salen de una página interna de la extensión, sí los de un sitio web.
+const REPORTE_WEB = 'https://darianjorgevich.github.io/tablero-ruta/';
 chrome.action.onClicked.addListener(() => {
-  chrome.tabs.create({ url: chrome.runtime.getURL('reporte.html') });
+  chrome.tabs.create({ url: REPORTE_WEB });
 });

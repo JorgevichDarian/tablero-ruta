@@ -2,7 +2,7 @@
    Un marcador por cliente del día, con el color de su ruta y un ícono de estado:
    pendiente (pin con su número de orden de visita), entregado (✓), rechazado (✕).
    Ubicación: columnas Longitud y Latitud de la base de clientes (la misma hoja de las ventanas).
-   Mapa: Leaflet (incluido en la extensión) con el fondo de CARTO (datos de OpenStreetMap). */
+   Mapa: Leaflet (incluido en la extensión) con el mapa estándar de OpenStreetMap. */
 /* global L */
 (function () {
   'use strict';
@@ -18,7 +18,7 @@
   var cfg = leer(); // { ocultas: { PAT: 1 }, filtro: 'todos' }
   var mapa = null, capas = {}, capaGrupo = null, visible = false, encuadrado = false;
   var abierto = null; // cliente con el globo abierto: "PAT|codigo"
-  var erroresTiles = 0, capaTiles = null, usandoAlternativo = false;
+  var capaTiles = null;
   var ultimo = null; // últimos datos dibujados
 
   function leer() { try { return Object.assign({ ocultas: {}, filtro: 'todos' }, JSON.parse(localStorage.getItem(CLAVE)) || {}); } catch (e) { return { ocultas: {}, filtro: 'todos' }; } }
@@ -51,21 +51,26 @@
   function crearMapa() {
     if (mapa) return;
     mapa = L.map('mp-lienzo', { zoomControl: true, preferCanvas: false, attributionControl: true }).setView([-38.95, -68.06], 12);
-    ponerTiles(false);
+    ponerTiles();
     capaGrupo = L.layerGroup().addTo(mapa);
     mapa.on('popupclose', function () { abierto = null; });
   }
-  // Fondo: CARTO Voyager (datos de OpenStreetMap). Los servidores de OpenStreetMap no se usan
-  // directo porque bloquean los pedidos que vienen de una extensión (error 403 "Access blocked").
-  // Si CARTO no carga, se pasa al mapa de calles de Esri.
-  function ponerTiles(alternativo) {
-    if (capaTiles) mapa.removeLayer(capaTiles);
-    usandoAlternativo = alternativo;
-    erroresTiles = 0;
-    capaTiles = alternativo
-      ? L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Mapa &copy; Esri, HERE, Garmin, &copy; colaboradores de OpenStreetMap' })
-      : L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' });
-    capaTiles.on('tileerror', function () { if (!usandoAlternativo && ++erroresTiles >= 4) ponerTiles(true); });
+  // Fondo: mapa estándar de OpenStreetMap. Sus servidores (y los de otros mapas gratuitos) no
+  // atienden pedidos que salen de una página interna de la extensión, así que ahí el mapa va sin
+  // calles y con un enlace a la versión web del reporte, donde sí cargan.
+  var WEB = 'https://darianjorgevich.github.io/tablero-ruta/#mapa';
+  function ponerTiles() {
+    if (location.protocol === 'chrome-extension:') {
+      var av = document.createElement('div');
+      av.className = 'mp-web';
+      av.innerHTML = 'Las calles del mapa se ven en la versión web del reporte. <a href="' + WEB + '">Abrir el mapa en la web</a>';
+      document.querySelector('.mp-mapa').appendChild(av);
+      return;
+    }
+    capaTiles = L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a>',
+    });
     capaTiles.addTo(mapa);
   }
 

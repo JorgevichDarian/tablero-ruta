@@ -427,3 +427,4 @@ table.skus tr.sku-rech td{color:#9B1C1C}
 }
 .sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
 .mp-rutas li.vacia .mp-ruta{opacity:.5}.mp-rutas li.vacia .mp-n{font-weight:400}
+.mp-web{position:absolute;top:12px;left:50%;transform:translateX(-50%);z-index:600;background:var(--noche);color:#fff;padding:8px 14px;border-radius:8px;font-size:13px;box-shadow:0 2px 8px rgba(0,0,0,.2);max-width:calc(100% - 120px)}.mp-web a{color:var(--naranja);font-weight:700;margin-left:6px}
