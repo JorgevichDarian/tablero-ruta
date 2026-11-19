@@ -58,7 +58,7 @@
   // Fondo: mapa estándar de OpenStreetMap. Sus servidores (y los de otros mapas gratuitos) no
   // atienden pedidos que salen de una página interna de la extensión, así que ahí el mapa va sin
   // calles y con un enlace a la versión web del reporte, donde sí cargan.
-  var WEB = 'https://darianjorgevich.github.io/tablero-ruta/#mapa';
+  var WEB = 'https://jorgevichdarian.github.io/tablero-ruta/#mapa';
   function ponerTiles() {
     if (location.protocol === 'chrome-extension:') {
       var av = document.createElement('div');

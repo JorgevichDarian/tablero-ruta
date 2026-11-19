@@ -4,7 +4,7 @@
 importScripts('lectores.js', 'base-clientes.js');
 
 const VERSION = chrome.runtime.getManifest().version;
-const PAGINA_PUBLICADA = 'https://darianjorgevich.github.io';
+const PAGINA_PUBLICADA = 'https://jorgevichdarian.github.io';
 
 const FUENTES = {
   nextbyn: {
@@ -226,7 +226,7 @@ chrome.runtime.onMessageExternal.addListener((msg, sender, responder) => {
 
 // El ícono abre la versión web del reporte (GitHub Pages). Los servidores de mapas gratuitos
 // no atienden los pedidos que salen de una página interna de la extensión, sí los de un sitio web.
-const REPORTE_WEB = 'https://darianjorgevich.github.io/tablero-ruta/';
+const REPORTE_WEB = 'https://jorgevichdarian.github.io/tablero-ruta/';
 chrome.action.onClicked.addListener(() => {
   chrome.tabs.create({ url: REPORTE_WEB });
 });

@@ -2,14 +2,14 @@
 
 Reporte en vivo del estado de cada camión de reparto, con datos de **Nextbyn** (avance, estado de entrega de cada cliente) y **Chess** (planillas, importes, bultos y cajones retornables).
 
-- **Reporte publicado:** https://darianjorgevich.github.io/tablero-ruta/
-- **Guía de instalación:** pestaña "Guía instalación extensión" del reporte (https://darianjorgevich.github.io/tablero-ruta/#guia)
+- **Reporte publicado:** https://jorgevichdarian.github.io/tablero-ruta/
+- **Guía de instalación:** pestaña "Guía instalación extensión" del reporte (https://jorgevichdarian.github.io/tablero-ruta/#guia)
 
 ## Cómo funciona
 
 Una página web no puede leer Nextbyn ni Chess por su cuenta: Chrome no deja que otro sitio use las sesiones de esos sistemas. Por eso hay dos partes:
 
-1. **Extensión de Chrome** (`extension/`): cuando el reporte se lo pide, lee el Mapa de entregas de Nextbyn y el Reporte de Repartos de Chess con la sesión de quien la usa. Si esas páginas no están abiertas, las abre un momento en una pestaña de fondo y la cierra al terminar. Solo le responde al reporte publicado en `darianjorgevich.github.io`.
+1. **Extensión de Chrome** (`extension/`): cuando el reporte se lo pide, lee el Mapa de entregas de Nextbyn y el Reporte de Repartos de Chess con la sesión de quien la usa. Si esas páginas no están abiertas, las abre un momento en una pestaña de fondo y la cierra al terminar. Solo le responde al reporte publicado en `jorgevichdarian.github.io`.
 2. **Reporte** (`docs/`, publicado con GitHub Pages): la página con los botones **Actualizar todo**, **Nextbyn** y **Chess**, el semáforo por camión, las alertas y el detalle de clientes. El mismo reporte se abre también desde el ícono de la extensión.
 
 ## Prioridad de pedidos pendientes
@@ -53,7 +53,7 @@ Pestaña con un marcador por cliente del día (`extension/mapa.js`): color por r
 
 1. El repositorio tiene que llamarse `tablero-ruta` (las direcciones de la guía y del reporte lo asumen).
 2. En GitHub: **Settings → Pages → Build and deployment**: *Deploy from a branch*, rama `main`, carpeta `/docs`.
-3. En unos minutos queda en `https://darianjorgevich.github.io/tablero-ruta/`.
+3. En unos minutos queda en `https://jorgevichdarian.github.io/tablero-ruta/`.
 
 Si el repositorio es privado, GitHub Pages requiere un plan pago (Pro, Team o Enterprise).
 
@@ -61,7 +61,7 @@ Si el repositorio es privado, GitHub Pages requiere un plan pago (Pro, Team o En
 
 ```
 extension/          Extensión de Chrome (se instala con "Cargar descomprimida")
-  manifest.json     Permisos: solo Nextbyn y Chess; acepta pedidos solo de darianjorgevich.github.io
+  manifest.json     Permisos: solo Nextbyn y Chess; acepta pedidos solo de jorgevichdarian.github.io
   bg.js             Recibe los pedidos del reporte y abre/lee las páginas
   lectores.js       Lectores de Nextbyn (camiones + pestaña Clientes) y de Chess (Reporte de Repartos)
   reporte.*         El reporte (el mismo que se publica)
