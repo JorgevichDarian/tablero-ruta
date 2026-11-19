@@ -2,7 +2,7 @@
    Un marcador por cliente del día, con el color de su ruta y un ícono de estado:
    pendiente (pin con su número de orden de visita), entregado (✓), rechazado (✕).
    Ubicación: columnas Longitud y Latitud de la base de clientes (la misma hoja de las ventanas).
-   Mapa: Leaflet (incluido en la extensión) con mapas de OpenStreetMap. */
+   Mapa: Leaflet (incluido en la extensión) con el fondo de CARTO (datos de OpenStreetMap). */
 /* global L */
 (function () {
   'use strict';
@@ -55,14 +55,16 @@
     capaGrupo = L.layerGroup().addTo(mapa);
     mapa.on('popupclose', function () { abierto = null; });
   }
-  // Mapas de OpenStreetMap; si no cargan (por ejemplo, bloqueados para esta página), se usa CARTO.
+  // Fondo: CARTO Voyager (datos de OpenStreetMap). Los servidores de OpenStreetMap no se usan
+  // directo porque bloquean los pedidos que vienen de una extensión (error 403 "Access blocked").
+  // Si CARTO no carga, se pasa al mapa de calles de Esri.
   function ponerTiles(alternativo) {
     if (capaTiles) mapa.removeLayer(capaTiles);
     usandoAlternativo = alternativo;
     erroresTiles = 0;
     capaTiles = alternativo
-      ? L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' })
-      : L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>' });
+      ? L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', { maxZoom: 19, attribution: 'Mapa &copy; Esri, HERE, Garmin, &copy; colaboradores de OpenStreetMap' })
+      : L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, subdomains: 'abcd', attribution: '&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">colaboradores de OpenStreetMap</a> &copy; <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>' });
     capaTiles.on('tileerror', function () { if (!usandoAlternativo && ++erroresTiles >= 4) ponerTiles(true); });
     capaTiles.addTo(mapa);
   }
