@@ -1,7 +1,7 @@
 // Service worker de la extensión: recibe los pedidos del reporte ("nextbyn" o "chess"),
 // lee la página correspondiente con la sesión del usuario y devuelve los datos.
-/* global importScripts, leerNextbyn, leerChess, chrome */
-importScripts('lectores.js');
+/* global importScripts, leerNextbyn, leerChess, descargarClientesChess, prepararBaseClientes, chrome */
+importScripts('lectores.js', 'base-clientes.js');
 
 const VERSION = chrome.runtime.getManifest().version;
 const PAGINA_PUBLICADA = 'https://darianjorgevich.github.io';
@@ -17,6 +17,13 @@ const FUENTES = {
     abiertas: 'https://logisticatotal.chesserp.com/*',
     url: 'https://logisticatotal.chesserp.com/AR1176/#/distribucion/reportes/repartos',
     lector: leerChess,
+    nombre: 'Chess',
+  },
+  // Exportación de la base de clientes (Ventas → Clientes → Exportar, filtro ACTIVOS).
+  chessClientes: {
+    abiertas: 'https://logisticatotal.chesserp.com/*',
+    url: 'https://logisticatotal.chesserp.com/AR1176/#/ventas/gestion/clientes',
+    lector: descargarClientesChess,
     nombre: 'Chess',
   },
 };
@@ -145,6 +152,37 @@ async function leerHistorico(msg) {
   }
 }
 
+// Base de clientes: una vez por día baja la exportación de Chess, la prepara (títulos, horarios
+// estandarizados, cadenas) y la manda al script de la hoja, que reemplaza "Hoja 1".
+async function actualizarBaseClientes(msg) {
+  try {
+    const url = String(msg.url || '');
+    if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(url)) throw new Error('Falta configurar el script de la hoja (pestaña Histórico).');
+    const pedirJSON = async (r) => {
+      const t = await r.text();
+      try { return JSON.parse(t); } catch (e) { throw new Error('El script de la hoja no respondió como se esperaba (' + r.status + '). Revisá que esté publicada la última versión del código.'); }
+    };
+    if (!msg.forzar) {
+      const est = await pedirJSON(await fetch(url + '?accion=estadoClientes', { cache: 'no-store', redirect: 'follow' }));
+      if (est.ok && est.hoy) return { ok: true, data: { yaEstaba: true, at: est.at, clientes: est.clientes } };
+      if (!est.ok || est.hoy === undefined) throw new Error('El script de la hoja todavía no sabe actualizar la base de clientes: publicá la versión nueva del código (pestaña Histórico).');
+    }
+    const r = await leer('chessClientes');
+    const prep = prepararBaseClientes(r.filas);
+    const resp = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ clave: CLAVE_HISTORICO, accion: 'clientes', filas: prep.filas }),
+      redirect: 'follow',
+    });
+    const j = await pedirJSON(resp);
+    if (!j.ok) throw new Error(j.error || 'El script rechazó la base de clientes.');
+    return { ok: true, data: { at: j.at || Date.now(), clientes: j.clientes, horarios: prep.horariosCambiados, cadenas: prep.cadenas, notas: prep.notas, archivo: r.archivo } };
+  } catch (e) {
+    return { ok: false, error: String((e && e.message) || e) };
+  }
+}
+
 // Un solo pedido en curso por fuente.
 const enCurso = {};
 function atender(msg) {
@@ -154,7 +192,11 @@ function atender(msg) {
   if (clave === 'ventanas') return leerVentanas();
   if (clave === 'guardarHistorico') return guardarHistorico(msg);
   if (clave === 'historico') return leerHistorico(msg);
-  if (!FUENTES[clave]) return Promise.resolve({ ok: false, error: 'Pedido desconocido.' });
+  if (clave === 'baseClientes') {
+    if (!enCurso.baseClientes) enCurso.baseClientes = actualizarBaseClientes(msg).finally(() => { delete enCurso.baseClientes; });
+    return enCurso.baseClientes;
+  }
+  if (!FUENTES[clave] || clave === 'chessClientes') return Promise.resolve({ ok: false, error: 'Pedido desconocido.' });
   if (!enCurso[clave]) {
     enCurso[clave] = leer(clave)
       .then((data) => ({ ok: true, data: data }))

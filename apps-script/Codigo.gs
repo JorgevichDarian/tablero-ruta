@@ -1,10 +1,12 @@
 /**
- * Histórico OT · Tablero de ruta
+ * Histórico OT y base de clientes · Tablero de ruta
  *
- * Recibe del reporte (a través de la extensión) el OT del día por camión y por cliente
- * y lo guarda en las pestañas "Camiones" y "Clientes" de esta hoja.
- * Cada envío reemplaza las filas del mismo día y la misma patente, así el último
- * envío del día es el que queda.
+ * 1) Recibe del reporte (a través de la extensión) el OT del día por camión y por cliente
+ *    y lo guarda en las pestañas "Camiones" y "Clientes" de esta hoja.
+ *    Cada envío reemplaza las filas del mismo día y la misma patente, así el último
+ *    envío del día es el que queda.
+ * 2) Una vez por día recibe la base de clientes exportada de Chess (ya con los horarios
+ *    estandarizados) y reemplaza "Hoja 1" de la hoja Tablero-de-ruta_Clientes-actualizado.
  *
  * Publicar: Implementar → Nueva implementación → Aplicación web
  *   Ejecutar como: Yo · Quién tiene acceso: Cualquier persona
@@ -17,8 +19,59 @@ const CLAVE = 'luqrJYc5_XlqKb8ajEBiteGJ';
 // Filas recientes que se revisan para reemplazar las del mismo día (la historia vieja no se toca).
 const VENTANA_FILAS = 4000;
 
-function doGet() {
+// Base de clientes que lee el reporte (ventanas horarias y pago pendiente).
+const HOJA_CLIENTES = '1o6Y0is6NK0BTW0z4Gj5coFKQ_3SFc9ZYArQYoaERDio';
+const PESTANA_CLIENTES = 'Hoja 1';
+// Columnas que lee el reporte, por posición (A = 0): D, F, W, BO, CA.
+const COLUMNAS_CLIENTES = { 3: 'Cliente', 5: 'Razón social', 22: 'Comentario', 66: 'Horario Ent.', 78: 'Descripción Sub-línea' };
+
+function doGet(e) {
+  if (e && e.parameter && e.parameter.accion === 'estadoClientes') return salida(estadoClientes());
   return salida({ ok: true, hoja: SpreadsheetApp.getActiveSpreadsheet().getName() });
+}
+
+function estadoClientes() {
+  const p = PropertiesService.getScriptProperties();
+  const at = Number(p.getProperty('clientesAt') || 0);
+  const tz = Session.getScriptTimeZone();
+  const dia = function (t) { return Utilities.formatDate(new Date(t), tz, 'yyyy-MM-dd'); };
+  return { ok: true, at: at, clientes: Number(p.getProperty('clientesN') || 0), hoy: !!at && dia(at) === dia(Date.now()) };
+}
+
+// Reemplaza toda la pestaña de clientes con lo que exportó Chess.
+function guardarClientes(d) {
+  const filas = d.filas || [];
+  if (filas.length < 500) throw new Error('Llegaron solo ' + filas.length + ' filas: no se reemplazó la base.');
+  const tit = filas[0];
+  Object.keys(COLUMNAS_CLIENTES).forEach(function (c) {
+    if (String(tit[c] || '').trim() !== COLUMNAS_CLIENTES[c]) throw new Error('La columna ' + c + ' no es "' + COLUMNAS_CLIENTES[c] + '": no se reemplazó la base.');
+  });
+  const ancho = tit.length;
+  // Igual que importar el Excel: los textos quedan como texto (el apóstrofo evita que Sheets
+  // los convierta en números, fechas o fórmulas), los números como números y las fechas como fechas.
+  const valores = filas.map(function (f) {
+    const out = new Array(ancho);
+    for (let c = 0; c < ancho; c++) {
+      const v = f[c];
+      if (v === null || v === undefined || v === '') out[c] = '';
+      else if (typeof v === 'number' || typeof v === 'boolean') out[c] = v;
+      else if (typeof v === 'object' && v.fecha) { const p = String(v.fecha).split('-'); out[c] = new Date(+p[0], +p[1] - 1, +p[2]); }
+      else out[c] = "'" + String(v);
+    }
+    return out;
+  });
+  const sh = SpreadsheetApp.openById(HOJA_CLIENTES).getSheetByName(PESTANA_CLIENTES);
+  if (!sh) throw new Error('La hoja de clientes no tiene la pestaña "' + PESTANA_CLIENTES + '".');
+  if (sh.getMaxRows() < valores.length) sh.insertRowsAfter(sh.getMaxRows(), valores.length - sh.getMaxRows());
+  if (sh.getMaxColumns() < ancho) sh.insertColumnsAfter(sh.getMaxColumns(), ancho - sh.getMaxColumns());
+  const alto = Math.max(sh.getLastRow(), 1), anchoViejo = Math.max(sh.getLastColumn(), 1);
+  sh.getRange(1, 1, alto, anchoViejo).clearContent();
+  sh.getRange(1, 1, valores.length, ancho).setValues(valores);
+  SpreadsheetApp.flush();
+  const p = PropertiesService.getScriptProperties();
+  const at = Date.now();
+  p.setProperties({ clientesAt: String(at), clientesN: String(valores.length - 1) });
+  return { ok: true, clientes: valores.length - 1, at: at };
 }
 
 function doPost(e) {
@@ -27,6 +80,7 @@ function doPost(e) {
   try {
     const d = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     if (d.clave !== CLAVE) return salida({ ok: false, error: 'Clave incorrecta.' });
+    if (d.accion === 'clientes') return salida(guardarClientes(d));
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const ahora = new Date();
 

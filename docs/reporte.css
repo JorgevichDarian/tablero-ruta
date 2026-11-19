@@ -46,6 +46,13 @@ nav.tabs>a.act{color:#fff;border-bottom-color:#fff}
 .ajustes label{display:flex;align-items:center;gap:6px}
 .ajustes input:not([type=checkbox]){width:56px;border:1px solid #3A5069;border-radius:5px;background:var(--noche);color:#fff;padding:3px 6px;text-align:center}
 .ajustes input[type=checkbox]{accent-color:#fff}
+.base-btn{display:inline-flex;align-items:center;gap:6px;font:inherit;color:#E4ECF5;background:none;border:1px solid #33475F;border-radius:6px;padding:4px 10px;cursor:pointer}
+.base-btn:hover{background:var(--noche2)}
+.base-btn .base-est{color:#9FB0C3}
+.base-btn .luz{width:8px;height:8px;border-radius:50%;background:#6B7C90}
+.base-btn.ok .luz{background:#3CC48D}.base-btn.err .luz{background:#F06A5E}
+.base-btn.ocupada .luz{background:#F2B33D;animation:latido 1s ease-in-out infinite}
+@media (prefers-reduced-motion:reduce){.base-btn.ocupada .luz{animation:none}}
 body.ver-guia .ajustes,body.ver-guia .fuentes{display:none}
 
 /* ---------- contenido ---------- */

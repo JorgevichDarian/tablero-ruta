@@ -79,7 +79,46 @@
       var m = String(e.message || e);
       if (m === 'NOEXT') { sinExtension = true; m = 'Falta la extensión'; }
       if (tipo === 'nextbyn') errNb = m; else errCh = m;
-    }).then(function () { ocupado[tipo] = false; pintar(); quizasGuardar(); });
+    }).then(function () { ocupado[tipo] = false; pintar(); quizasGuardar(); if (tipo === 'chess' && !errCh) quizasActualizarBase(); });
+  }
+
+  // ---------- base de clientes: una vez por día, de Chess a la hoja de clientes ----------
+  var CLAVE_BASE = 'ltReporteBase';
+  var base = leerLS(CLAVE_BASE, {}); // { dia, at, clientes, err, intento }
+  var baseOcupada = false;
+  function quizasActualizarBase() {
+    var ahora = new Date();
+    if (!hcfg.url || baseOcupada || base.dia === fechaISO(ahora) || ahora.getHours() < 6) return;
+    if (base.intento && Date.now() - base.intento < 30 * 6e4) return; // después de un error, reintenta cada 30 min
+    actualizarBase(false);
+  }
+  function actualizarBase(forzar) {
+    if (baseOcupada) return;
+    if (!hcfg.url) { base.err = 'Primero configurá el script de la hoja en la pestaña Histórico (paso 2).'; pintarBase(); location.hash = '#historico'; return; }
+    baseOcupada = true; pintarBase();
+    pedir('baseClientes', { url: hcfg.url, forzar: !!forzar }).then(function (d) {
+      base = { dia: fechaISO(), at: d.at || Date.now(), clientes: d.clientes, horarios: d.horarios, cadenas: d.cadenas, yaEstaba: !!d.yaEstaba };
+      guardarLS(CLAVE_BASE, base);
+      if (!d.yaEstaba || !vt || vt.at < base.at) actualizarVentanas(true);
+    }, function (e) {
+      var m = String(e.message || e);
+      base.err = m === 'NOEXT' ? 'Falta la extensión.' : m;
+      base.intento = Date.now();
+      guardarLS(CLAVE_BASE, base);
+    }).then(function () { baseOcupada = false; pintarBase(); });
+  }
+  function pintarBase() {
+    var b = $('b-base');
+    if (!b) return;
+    var hoyB = base.dia === fechaISO();
+    var txt = baseOcupada ? 'actualizando…' : hoyB ? 'hoy ' + hhmm(base.at) : base.err ? 'sin actualizar' : base.at ? 'del ' + new Date(base.at).toLocaleDateString('es-AR', { day: 'numeric', month: 'numeric' }) : 'sin actualizar';
+    b.querySelector('.base-est').textContent = txt;
+    b.className = 'base-btn' + (baseOcupada ? ' ocupada' : hoyB ? ' ok' : base.err ? ' err' : '');
+    b.disabled = baseOcupada;
+    b.title = baseOcupada ? 'Bajando la base de clientes de Chess y guardándola en la hoja…'
+      : (hoyB ? 'Base de clientes actualizada hoy a las ' + hhmm(base.at) + (base.clientes ? ' (' + base.clientes + ' clientes)' : '') + '. '
+        : base.err ? 'No se pudo actualizar: ' + base.err + ' ' : 'La base de clientes se actualiza sola una vez por día al leer Chess. ')
+      + 'Tocá para bajarla de Chess ahora.';
   }
 
   function actualizarTodo() {
@@ -896,12 +935,13 @@
     if (hmsg) h += '<p class="h-msg">' + esc(hmsg) + '</p>';
     if (!hcfg.url) h += '<div class="h-setup"><h3>Configurar el guardado (una sola vez)</h3><ol>' +
       '<li>Abrí la hoja <a href="' + HOJA_HIST_URL + '" target="_blank" rel="noopener">Histórico OT</a> y entrá a <b>Extensiones → Apps Script</b>.</li>' +
-      '<li>Borrá lo que aparece y pegá todo el código del archivo <a href="https://drive.google.com/file/d/1CSH4LK8JvPP7ZpJo2nDoAmPu5cHTcE_Q/view" target="_blank" rel="noopener">Codigo.gs</a> (está en la misma carpeta de Drive). Guardá con el ícono del disquete.</li>' +
+      '<li>Borrá lo que aparece y pegá todo el código del archivo <a href="https://drive.google.com/file/d/1fqx8tlNRBFWFlebCBAclVuUMPtxloKUg/view" target="_blank" rel="noopener">Codigo.gs</a> (está en la misma carpeta de Drive). Guardá con el ícono del disquete.</li>' +
       '<li>Tocá <b>Implementar → Nueva implementación</b>, elegí el tipo <b>Aplicación web</b>, con <b>Ejecutar como: Yo</b> y <b>Quién tiene acceso: Cualquier persona</b>. Autorizá los permisos que pide Google.</li>' +
       '<li>Copiá la <b>URL de la aplicación web</b> (termina en /exec) y pegala acá:</li></ol>' +
       '<div class="h-url"><input id="h-url" placeholder="https://script.google.com/macros/s/…/exec"><button type="button" id="h-url-ok">Guardar dirección</button></div>' +
-      '<p class="h-nota">La dirección queda guardada en este Chrome. Cada PC que tenga el reporte abierto guarda los datos del día; si varias lo tienen abierto, queda el último envío.</p></div>';
-    else h += '<p class="h-estado">Guardado automático activo en este Chrome' + (hcfg.ultimo ? ', último envío a las ' + hhmm(hcfg.ultimo) : '') + '. <button type="button" class="h-link" id="h-url-cambiar">Cambiar dirección del script</button></p>';
+      '<p class="h-nota">La dirección queda guardada en este Chrome. Cada PC que tenga el reporte abierto guarda los datos del día; si varias lo tienen abierto, queda el último envío. El mismo script actualiza una vez por día la base de clientes desde Chess.</p></div>';
+    else h += '<p class="h-estado">Guardado automático activo en este Chrome' + (hcfg.ultimo ? ', último envío a las ' + hhmm(hcfg.ultimo) : '') + '. <button type="button" class="h-link" id="h-url-cambiar">Cambiar dirección del script</button></p>' +
+      '<p class="h-nota">Si cambia el código del script (archivo <a href="https://drive.google.com/file/d/1fqx8tlNRBFWFlebCBAclVuUMPtxloKUg/view" target="_blank" rel="noopener">Codigo.gs</a>): pegalo en Apps Script, guardá y tocá <b>Implementar → Administrar implementaciones → lápiz → Versión: Nueva versión → Implementar</b>. Así la dirección no cambia.</p>';
 
     if (hdat) {
       var porDia = {}, porCam = {}, porCli = {};
@@ -1072,6 +1112,8 @@
   window.addEventListener('hashchange', function () { mostrarVista(); window.scrollTo(0, 0); });
   mostrarVista();
 
+  $('b-base').addEventListener('click', function () { actualizarBase(true); });
+  pintarBase();
   pintar();
   actualizarTodo();
 })();

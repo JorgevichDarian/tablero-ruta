@@ -390,3 +390,118 @@ async function leerChess() {
 }
 
 if (typeof self !== 'undefined') { self.leerNextbyn = leerNextbyn; self.leerChess = leerChess; }
+
+// Base de clientes: la misma exportación que hace Chess en Ventas → Clientes → Exportar
+// (filtro ACTIVOS). Chess arma un .xlsx y devuelve su dirección; se descarga con la sesión
+// del usuario y se abre acá mismo (un .xlsx es un zip con XML adentro).
+// Devuelve { filas: [[valor, …], …], archivo }. Las fechas vienen como { fecha: 'aaaa-mm-dd' }.
+async function descargarClientesChess() {
+  try {
+    const base = (/^\/[^/]+/.exec(location.pathname) || ['/AR1176'])[0];
+    const r = await fetch(base + '/web/api/clientes/exportarClientes?piSuc=1&piFza=1&pcMod=PRE&piFil=1&piOpc=1&plLoc=false&piLCred=1', { credentials: 'include', cache: 'no-store' });
+    if (r.status === 401 || r.status === 403) return { error: 'La sesión de Chess venció. Entrá de nuevo y volvé a intentar.' };
+    const j = await r.json().catch(() => null);
+    if (!r.ok || !j) return { error: 'Chess no respondió a la exportación de clientes (' + r.status + ').' };
+    if (j.error && j.error.length) return { error: 'Chess: ' + JSON.stringify(j.error).slice(0, 300) };
+    if (!j.pcfile) return { error: 'Chess no devolvió el archivo de la exportación de clientes.' };
+    const url = base + '/' + String(j.pcfile).replace(/^\/+/, '');
+    const a = await fetch(url, { credentials: 'include', cache: 'no-store' });
+    if (!a.ok) return { error: 'No se pudo descargar el archivo de clientes de Chess (' + a.status + ').' };
+    const buf = new Uint8Array(await a.arrayBuffer());
+
+    // --- zip ---
+    const dv = new DataView(buf.buffer, buf.byteOffset, buf.byteLength);
+    let eocd = -1;
+    for (let i = buf.length - 22; i >= Math.max(0, buf.length - 70000); i--) { if (dv.getUint32(i, true) === 0x06054b50) { eocd = i; break; } }
+    if (eocd < 0) return { error: 'El archivo de clientes de Chess no es un Excel válido.' };
+    const nEnt = dv.getUint16(eocd + 10, true);
+    let p = dv.getUint32(eocd + 16, true);
+    const entradas = {};
+    const dec = new TextDecoder();
+    for (let i = 0; i < nEnt; i++) {
+      if (dv.getUint32(p, true) !== 0x02014b50) break;
+      const metodo = dv.getUint16(p + 10, true), comp = dv.getUint32(p + 20, true);
+      const ln = dv.getUint16(p + 28, true), le = dv.getUint16(p + 30, true), lc = dv.getUint16(p + 32, true);
+      const off = dv.getUint32(p + 42, true);
+      entradas[dec.decode(buf.subarray(p + 46, p + 46 + ln))] = { metodo, comp, off };
+      p += 46 + ln + le + lc;
+    }
+    async function archivo(nombre) {
+      const e = entradas[nombre];
+      if (!e) return null;
+      const ini = e.off + 30 + dv.getUint16(e.off + 26, true) + dv.getUint16(e.off + 28, true);
+      const datos = buf.subarray(ini, ini + e.comp);
+      if (e.metodo === 0) return dec.decode(datos);
+      if (e.metodo !== 8) throw new Error('compresión no soportada');
+      const st = new Blob([datos]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+      return await new Response(st).text();
+    }
+    const xml = (t) => new DOMParser().parseFromString(t, 'application/xml');
+    const hijos = (n, tag) => Array.from(n.getElementsByTagName(tag));
+
+    // Primera hoja del libro.
+    let hojaPath = 'xl/worksheets/sheet1.xml';
+    try {
+      const wb = xml(await archivo('xl/workbook.xml'));
+      const rels = xml(await archivo('xl/_rels/workbook.xml.rels'));
+      const h1 = hijos(wb, 'sheet')[0];
+      const rid = h1 && (h1.getAttribute('r:id') || h1.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id'));
+      const rel = hijos(rels, 'Relationship').find((x) => x.getAttribute('Id') === rid);
+      if (rel) { const t = rel.getAttribute('Target'); hojaPath = t.startsWith('/') ? t.slice(1) : 'xl/' + t; }
+    } catch (e) { /* se usa sheet1 */ }
+
+    const sst = [];
+    const sstXml = await archivo('xl/sharedStrings.xml');
+    if (sstXml) hijos(xml(sstXml), 'si').forEach((si) => sst.push(hijos(si, 't').map((t) => t.textContent).join('')));
+
+    // Estilos con formato de fecha.
+    const esFecha = {};
+    const stXml = await archivo('xl/styles.xml');
+    if (stXml) {
+      const st = xml(stXml), propios = {};
+      hijos(st, 'numFmt').forEach((f) => { propios[f.getAttribute('numFmtId')] = f.getAttribute('formatCode') || ''; });
+      const xfs = st.getElementsByTagName('cellXfs')[0];
+      if (xfs) hijos(xfs, 'xf').forEach((xf, i) => {
+        const id = +xf.getAttribute('numFmtId');
+        const cod = propios[id] != null ? propios[id].replace(/"[^"]*"|\[[^\]]*\]/g, '') : '';
+        esFecha[i] = (id >= 14 && id <= 17) || id === 22 || (propios[id] != null && /[dy]/i.test(cod) && !/^[hms:.0#]*$/i.test(cod));
+      });
+    }
+    const fechaDeSerie = (n) => {
+      const d = new Date(Math.round((n - 25569) * 864e5));
+      return d.getUTCFullYear() + '-' + ('0' + (d.getUTCMonth() + 1)).slice(-2) + '-' + ('0' + d.getUTCDate()).slice(-2);
+    };
+    const colDe = (ref) => { let c = 0; const m = /^[A-Z]+/.exec(ref || ''); if (!m) return -1; for (const ch of m[0]) c = c * 26 + ch.charCodeAt(0) - 64; return c - 1; };
+
+    const hoja = await archivo(hojaPath);
+    if (!hoja) return { error: 'El Excel de clientes de Chess no tiene hojas.' };
+    const filas = [];
+    hijos(xml(hoja), 'row').forEach((row) => {
+      const f = [];
+      let pos = 0;
+      hijos(row, 'c').forEach((c) => {
+        const col = c.getAttribute('r') ? colDe(c.getAttribute('r')) : pos;
+        pos = col + 1;
+        const t = c.getAttribute('t') || 'n';
+        const v = c.getElementsByTagName('v')[0];
+        let val = '';
+        if (t === 's') val = v ? (sst[+v.textContent] || '') : '';
+        else if (t === 'inlineStr') val = hijos(c, 't').map((x) => x.textContent).join('');
+        else if (t === 'str') val = v ? v.textContent : '';
+        else if (t === 'b') val = v ? v.textContent === '1' : '';
+        else if (v && v.textContent !== '') {
+          const n = Number(v.textContent);
+          val = isNaN(n) ? v.textContent : esFecha[+(c.getAttribute('s') || 0)] ? { fecha: fechaDeSerie(n) } : n;
+        }
+        while (f.length < col) f.push('');
+        f[col] = val;
+      });
+      const idx = +row.getAttribute('r') - 1;
+      while (filas.length < idx) filas.push([]);
+      filas[idx >= 0 ? idx : filas.length] = f;
+    });
+    return { filas: filas, archivo: String(j.pcfile).split('/').pop() };
+  } catch (e) {
+    return { error: 'No se pudo leer la base de clientes de Chess: ' + String((e && e.message) || e) };
+  }
+}
