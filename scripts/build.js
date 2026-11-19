@@ -12,6 +12,9 @@ fs.mkdirSync(docs, { recursive: true });
 // El reporte publicado es el mismo que trae la extensión.
 fs.copyFileSync(path.join(ext, 'reporte.html'), path.join(docs, 'index.html'));
 fs.copyFileSync(path.join(ext, 'reporte.js'), path.join(docs, 'reporte.js'));
+fs.copyFileSync(path.join(ext, 'mapa.js'), path.join(docs, 'mapa.js'));
+fs.mkdirSync(path.join(docs, 'vendor', 'leaflet'), { recursive: true });
+for (const f of ['leaflet.js', 'leaflet.css', 'LICENSE']) fs.copyFileSync(path.join(ext, 'vendor', 'leaflet', f), path.join(docs, 'vendor', 'leaflet', f));
 fs.copyFileSync(path.join(ext, 'reporte.css'), path.join(docs, 'reporte.css'));
 fs.copyFileSync(path.join(ext, 'icono128.png'), path.join(docs, 'icono.png'));
 fs.copyFileSync(path.join(ext, 'logo-lt.png'), path.join(docs, 'logo-lt.png'));

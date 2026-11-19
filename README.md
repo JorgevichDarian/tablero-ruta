@@ -38,6 +38,10 @@ La pestaña **Histórico** del reporte guarda y muestra el OT de cada día. Los 
 
 Una vez por día (la primera lectura de Chess desde las 6:00) la extensión pide a Chess la misma exportación que Ventas → Clientes → Exportar con el filtro ACTIVOS (`/web/api/clientes/exportarClientes`), descarga el .xlsx con la sesión del usuario y lo abre en la pestaña de Chess. `extension/base-clientes.js` deja la fila de títulos y los datos, estandariza "Horario Ent." (mismas reglas que la carga a mano) y pone 07:30 a 11:00 a las cadenas. El script de la hoja (`apps-script/Codigo.gs`, acción `clientes`) reemplaza "Hoja 1" de Tablero-de-ruta_Clientes-actualizado. Si Chess cambia las columnas D, F, W, BO o CA, o trae menos de 500 clientes, no se toca la hoja. El botón **Base clientes** muestra el estado y fuerza una actualización.
 
+## Ver en mapa
+
+Pestaña con un marcador por cliente del día (`extension/mapa.js`): color por ruta, pin con el número de orden de visita para los pendientes (borde rojo si están en riesgo), ✓ para entregados y ✕ para rechazados. La ubicación sale de las columnas T (Longitud) y U (Latitud) de la base de clientes. El mapa usa Leaflet 1.9.4 (BSD-2, en `extension/vendor/leaflet`, compilado del código fuente oficial) y mapas de OpenStreetMap (si no cargan, CARTO).
+
 ## Horarios de referencia
 
 | | Apertura de ruta | Fin de jornada |

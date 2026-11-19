@@ -42,8 +42,8 @@
   var CLAVE_PRIO = 'ltReportePrio';
   var pr = leerLS(CLAVE_PRIO, null); // { mapa, at }
   var CLAVE_VENT = 'ltReporteVent', CLAVE_OBS = 'ltReporteObs';
-  var vt = leerLS(CLAVE_VENT, null); // { v: 2, mapa: { codigo: { f: [[desde, hasta] en minutos], nota, pago } }, at }
-  if (vt && vt.v !== 2) vt = null; // caché anterior sin el dato de pago pendiente
+  var vt = leerLS(CLAVE_VENT, null); // { v: 3, mapa: { codigo: { f: [[desde, hasta] en minutos], nota, pago, ll: [lat, lng] } }, at }
+  if (vt && vt.v !== 3) vt = null; // caché anterior sin pago pendiente o sin ubicación
   var errVt = '', leyendoVt = false;
   var abiertos = {}, clientesAbiertos = {};
   var ocupado = { nextbyn: false, chess: false };
@@ -133,7 +133,7 @@
     if (leyendoVt) return;
     leyendoVt = true;
     pedir('ventanas').then(function (data) {
-      vt = { v: 2, mapa: armarVentanas(data.csv), at: data.at };
+      vt = { v: 3, mapa: armarVentanas(data.csv), at: data.at };
       errVt = '';
       guardarLS(CLAVE_VENT, vt);
     }).catch(function (e) {
@@ -412,9 +412,9 @@
   }
 
   // ---------- OT: entregas dentro de la ventana horaria ----------
-  // Hoja de clientes (select D, F, BO, W, CA): código, razón social, "hh:mm a hh:mm; hh:mm a hh:mm",
-  // comentario y descripción de sub-línea. Pago pendiente autorizado: comentario con "AUTORIZADO"
-  // (no "NO AUTORIZADO") o cliente en cuenta corriente.
+  // Hoja de clientes (select D, F, BO, W, CA, T, U): código, razón social, "hh:mm a hh:mm; hh:mm a hh:mm",
+  // comentario, descripción de sub-línea, longitud y latitud. Pago pendiente autorizado: comentario
+  // con "AUTORIZADO" (no "NO AUTORIZADO") o cliente en cuenta corriente.
   function armarVentanas(csv) {
     var filas = leerCSV(csv), mapa = {}, n = 0;
     filas.forEach(function (f) {
@@ -423,11 +423,19 @@
       var txt = String(f[2] || '').trim(), fr = [], re = /(\d{2}):(\d{2}) a (\d{2}):(\d{2})/g, m;
       while ((m = re.exec(txt))) fr.push([+m[1] * 60 + +m[2], +m[3] * 60 + +m[4]]);
       var limpio = /^\d{2}:\d{2} a \d{2}:\d{2}(; \d{2}:\d{2} a \d{2}:\d{2})*$/.test(txt);
-      mapa[cod] = { f: limpio ? fr : [], nota: !limpio && txt ? txt : '', pago: pagoAutorizado(f[3], f[4]) };
+      mapa[cod] = { f: limpio ? fr : [], nota: !limpio && txt ? txt : '', pago: pagoAutorizado(f[3], f[4]), ll: ubicacion(f[6], f[5]) };
       n++;
     });
     if (!n) throw new Error('La hoja de ventanas horarias no tiene clientes con código.');
     return mapa;
+  }
+  // Latitud y longitud del cliente (Argentina: ambas negativas). Sin dato o en 0: null.
+  function ubicacion(lat, lng) {
+    var a = parseFloat(String(lat || '').replace(',', '.')), b = parseFloat(String(lng || '').replace(',', '.'));
+    if (!isFinite(a) || !isFinite(b) || !a || !b) return null;
+    a = -Math.abs(a); b = -Math.abs(b);
+    if (a < -56 || a > -21 || b < -74 || b > -53) return null;
+    return [Math.round(a * 1e6) / 1e6, Math.round(b * 1e6) / 1e6];
   }
   function pagoAutorizado(comentario, subLinea) {
     var com = String(comentario || '').toUpperCase(), sub = String(subLinea || '').toUpperCase().trim();
@@ -717,6 +725,7 @@
   function pintar() {
     pintarBotones();
     pintarSub();
+    if (window.LTMapa) setTimeout(window.LTMapa.refrescar, 0);
     var av = '';
     if (sinExtension) {
       av += '<div class="err">Para traer los datos hace falta la extensión <b>Tablero de ruta</b> en este Chrome. <a href="' + GUIA + '">Cómo instalarla</a>.</div>';
@@ -1096,18 +1105,48 @@
   // Redibuja cada minuto para que la línea de "ahora" avance aunque no haya datos nuevos.
   setInterval(function () { if (nb && location.hash !== '#guia') pintar(); }, 60000);
 
-  // ---------- pestañas: Tablero / Guía instalación extensión ----------
+  // ---------- datos para la pestaña Ver en mapa (mapa.js) ----------
+  function datosMapa() {
+    if (!nb) return null;
+    var ahora = new Date();
+    var rutas = analizar(nb.cams, ahora).map(function (e) {
+      var pat = String(e.patente).toUpperCase();
+      var dc = ch && ch.data && ch.data[pat];
+      var lista = listaClientes(pat);
+      return {
+        pat: pat, vehiculo: e.vehiculo || '', sem: e.sem, txt: e.txt, estado: e.estado,
+        chofer: dc ? String(dc.chofer || '').replace(/^\d+\s*-\s*/, '') : '',
+        clientes: lista.map(function (c) {
+          var r = evaluarOT(pat, c, ahora), v = vt && vt.mapa && c.codigo ? vt.mapa[c.codigo] : null;
+          return {
+            codigo: c.codigo || '', nombre: String(c.cliente || '').replace(/^\s*\d+\s*-\s*/, ''),
+            domicilio: c.domicilio || '', localidad: c.localidad || '',
+            est: c.est || '', dev: !!r.dev, ll: v ? v.ll : null, st: r.st, riesgo: r.riesgo || '', pos: r.pos || null,
+            ventana: r.f.length ? textoVentana(r.f) : (r.nota || 'Sin ventana'),
+            hora: r.h ? hhmm(r.h.t) : '', eta: r.eta ? hhmm(r.eta) : '',
+          };
+        }),
+      };
+    });
+    return { rutas: rutas, at: nb.at, chAt: ch ? ch.at : null, vtAt: vt ? vt.at : null, sinVentanas: !vt };
+  }
+  window.LTReporte = { datosMapa: datosMapa, esc: esc, hhmm: hhmm };
+
+  // ---------- pestañas: Tablero / Ver en mapa / Histórico / Guía instalación extensión ----------
   function mostrarVista() {
-    var v = location.hash === '#guia' ? 'guia' : location.hash === '#historico' ? 'historico' : 'tablero';
+    var v = location.hash === '#guia' ? 'guia' : location.hash === '#historico' ? 'historico' : location.hash === '#mapa' ? 'mapa' : 'tablero';
     $('main').hidden = v !== 'tablero';
     $('guia').hidden = v !== 'guia';
     $('historico').hidden = v !== 'historico';
+    $('mapa').hidden = v !== 'mapa';
     document.body.classList.toggle('ver-guia', v !== 'tablero');
-    ['tablero', 'historico', 'guia'].forEach(function (k) {
+    document.body.classList.toggle('ver-mapa', v === 'mapa');
+    ['tablero', 'mapa', 'historico', 'guia'].forEach(function (k) {
       $('tab-' + k).classList.toggle('act', v === k);
       $('tab-' + k).setAttribute('aria-selected', String(v === k));
     });
     if (v === 'historico') abrirHistorico();
+    if (window.LTMapa) window.LTMapa.visible(v === 'mapa');
   }
   window.addEventListener('hashchange', function () { mostrarVista(); window.scrollTo(0, 0); });
   mostrarVista();
