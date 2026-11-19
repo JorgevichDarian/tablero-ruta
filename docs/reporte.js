@@ -1118,12 +1118,13 @@
         chofer: dc ? String(dc.chofer || '').replace(/^\d+\s*-\s*/, '') : '',
         clientes: lista.map(function (c) {
           var r = evaluarOT(pat, c, ahora), v = vt && vt.mapa && c.codigo ? vt.mapa[c.codigo] : null;
+          var he = c.est ? horaEntrega(pat, c) : null; // hora de la visita (entregados y rechazados)
           return {
             codigo: c.codigo || '', nombre: String(c.cliente || '').replace(/^\s*\d+\s*-\s*/, ''),
             domicilio: c.domicilio || '', localidad: c.localidad || '',
             est: c.est || '', dev: !!r.dev, ll: v ? v.ll : null, st: r.st, riesgo: r.riesgo || '', pos: r.pos || null,
             ventana: r.f.length ? textoVentana(r.f) : (r.nota || 'Sin ventana'),
-            hora: r.h ? hhmm(r.h.t) : '', eta: r.eta ? hhmm(r.eta) : '',
+            hora: he ? hhmm(he.t) : '', t: he ? +new Date(he.t) : null, eta: r.eta ? hhmm(r.eta) : '',
           };
         }),
       };
